@@ -1,0 +1,133 @@
+2025-06-05 18:31:15,708 - INFO - === Weather App Started === 
+2025-06-05 18:31:15,739 - ERROR - Faced Error fetching weather data: 'function' object has no attribute 'get' 
+2025-06-05 18:31:15,739 - INFO - === Weather App Finished === 
+2025-06-05 18:35:29,508 - INFO - === Weather App Started === 
+2025-06-05 18:35:29,527 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:35:29,534 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:37:20,862 - INFO - === Weather App Started === 
+2025-06-05 18:37:20,903 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:37:20,908 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:38:34,607 - INFO - === Weather App Started === 
+2025-06-05 18:38:34,629 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:38:34,633 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:38:34,633 - INFO - Connecting to MySQL... 
+2025-06-05 18:41:04,875 - INFO - === Weather App Started === 
+2025-06-05 18:41:04,978 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:41:04,983 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:41:04,983 - INFO - Connecting to MySQL... 
+2025-06-05 18:48:10,114 - INFO - === Weather App Started === 
+2025-06-05 18:48:10,144 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:48:10,148 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:48:10,148 - INFO - Connecting to MySQL... 
+2025-06-05 18:51:26,742 - INFO - === Weather App Started === 
+2025-06-05 18:51:26,762 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:51:26,765 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:51:26,766 - INFO - Connecting to MySQL... 
+2025-06-05 18:53:43,390 - INFO - === Weather App Started === 
+2025-06-05 18:53:43,420 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:53:43,424 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:53:43,425 - INFO - Connecting to MySQL... 
+2025-06-05 18:57:26,629 - INFO - === Weather App Started === 
+2025-06-05 18:57:26,648 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:57:26,652 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 18:57:26,652 - INFO - Connecting to MySQL... 
+2025-06-05 18:59:37,700 - INFO - === Weather App Started === 
+2025-06-05 18:59:37,731 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 18:59:37,734 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:00:52,340 - INFO - === Weather App Started === 
+2025-06-05 19:00:52,358 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:00:52,362 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:01:00,358 - INFO - === Weather App Started === 
+2025-06-05 19:01:00,379 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:01:00,383 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:03:11,348 - INFO - === Weather App Started === 
+2025-06-05 19:03:11,368 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:03:11,378 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:03:11,378 - INFO - Connecting to MySQL... 
+2025-06-05 19:09:23,680 - INFO - === Weather App Started === 
+2025-06-05 19:09:23,719 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:09:23,728 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:09:23,728 - INFO - Connecting to MySQL... 
+2025-06-05 19:11:52,199 - INFO - === Weather App Started === 
+2025-06-05 19:11:52,228 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:11:52,238 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:11:52,238 - INFO - Connecting to MySQL... 
+2025-06-05 19:14:56,138 - INFO - === Weather App Started === 
+2025-06-05 19:14:56,169 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:14:56,172 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:14:56,172 - INFO - Connecting to MySQL... 
+2025-06-05 19:17:30,969 - INFO - === Weather App Started === 
+2025-06-05 19:17:32,035 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:17:32,044 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:17:32,044 - INFO - Connecting to MySQL... 
+2025-06-05 19:24:22,627 - INFO - === Weather App Started === 
+2025-06-05 19:24:22,657 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:24:22,662 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:24:22,662 - INFO - Connecting to MySQL... 
+2025-06-05 19:24:22,662 - ERROR - Faced Error while inserting into MySQL: 'cryptography' package is required for sha256_password or caching_sha2_password auth methods 
+2025-06-05 19:24:22,688 - ERROR - Faced Error during aggregation: 'cryptography' package is required for sha256_password or caching_sha2_password auth methods 
+2025-06-05 19:24:22,688 - INFO - === Weather App Finished === 
+2025-06-05 19:25:16,946 - INFO - === Weather App Started === 
+2025-06-05 19:25:16,972 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:25:16,979 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:25:16,979 - INFO - Connecting to MySQL... 
+2025-06-05 19:25:16,998 - INFO - Connected to MySQL! 
+2025-06-05 19:25:17,008 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:25:17,042 - ERROR - Faced Error during aggregation: 'Records by Country' 
+2025-06-05 19:25:17,042 - INFO - === Weather App Finished === 
+2025-06-05 19:30:58,317 - INFO - === Weather App Started === 
+2025-06-05 19:30:58,338 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:30:58,349 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:30:58,349 - INFO - Connecting to MySQL... 
+2025-06-05 19:30:58,352 - INFO - Connected to MySQL! 
+2025-06-05 19:30:58,359 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:30:58,387 - ERROR - Faced Error during aggregation: 'Records by Country' 
+2025-06-05 19:30:58,388 - INFO - === Weather App Finished === 
+2025-06-05 19:31:59,319 - INFO - === Weather App Started === 
+2025-06-05 19:31:59,331 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:31:59,339 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:31:59,339 - INFO - Connecting to MySQL... 
+2025-06-05 19:31:59,339 - INFO - Connected to MySQL! 
+2025-06-05 19:31:59,347 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:31:59,368 - INFO - Aggregation queries executed successfully 
+2025-06-05 19:31:59,368 - INFO - === Weather App Finished === 
+2025-06-05 19:35:07,719 - INFO - === Weather App Started === 
+2025-06-05 19:35:07,740 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:35:07,744 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:35:07,744 - INFO - Connecting to MySQL... 
+2025-06-05 19:35:07,747 - INFO - Connected to MySQL! 
+2025-06-05 19:35:07,747 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:35:07,758 - ERROR - Faced Error during aggregation: 'Records by Country' 
+2025-06-05 19:35:07,758 - INFO - === Weather App Finished === 
+2025-06-05 19:37:35,919 - INFO - === Weather App Started === 
+2025-06-05 19:37:39,007 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:37:39,016 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:37:39,016 - INFO - Connecting to MySQL... 
+2025-06-05 19:37:39,020 - INFO - Connected to MySQL! 
+2025-06-05 19:37:39,031 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:37:39,052 - ERROR - Faced Error during aggregation: 'Records by Weather' 
+2025-06-05 19:37:39,052 - INFO - === Weather App Finished === 
+2025-06-05 19:40:58,754 - INFO - === Weather App Started === 
+2025-06-05 19:40:58,773 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:40:58,776 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:40:58,777 - INFO - Connecting to MySQL... 
+2025-06-05 19:40:58,780 - INFO - Connected to MySQL! 
+2025-06-05 19:40:58,790 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:40:58,807 - ERROR - Faced Error during aggregation: 'Group by Weather' 
+2025-06-05 19:40:58,807 - INFO - === Weather App Finished === 
+2025-06-05 19:42:24,314 - INFO - === Weather App Started === 
+2025-06-05 19:42:24,332 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:42:24,335 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:42:24,335 - INFO - Connecting to MySQL... 
+2025-06-05 19:42:24,337 - INFO - Connected to MySQL! 
+2025-06-05 19:42:24,340 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:42:24,357 - ERROR - Faced Error during aggregation: 'Group by Weather' 
+2025-06-05 19:42:24,357 - INFO - === Weather App Finished === 
+2025-06-05 19:44:05,558 - INFO - === Weather App Started === 
+2025-06-05 19:44:05,589 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-05 19:44:05,592 - INFO - Weather data saved to weather_data.csv 
+2025-06-05 19:44:05,592 - INFO - Connecting to MySQL... 
+2025-06-05 19:44:05,594 - INFO - Connected to MySQL! 
+2025-06-05 19:44:05,607 - INFO - Successfully inserted into MySql for Mumbai 
+2025-06-05 19:44:05,635 - INFO - Aggregation queries executed successfully 
+2025-06-05 19:44:05,639 - INFO - === Weather App Finished === 

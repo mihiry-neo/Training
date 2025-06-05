@@ -1,0 +1,3 @@
+2025-06-05 18:31:29,690 - INFO - === Weather App Started === 
+2025-06-05 18:31:29,713 - ERROR - Faced Error fetching weather data: 'function' object has no attribute 'get' 
+2025-06-05 18:31:29,713 - INFO - === Weather App Finished === 
