@@ -1,0 +1,1 @@
+Hello, How are you? I'm Mihir Yadav. Today we are dealing with File Handling.Let's start with it. There are multiple modes while reading and writing file such as 'w','r','a','w+','r+' and many more.

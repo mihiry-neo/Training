@@ -148,7 +148,7 @@ def main():
     CITY = 'Mumbai'
 
     MYSQL_USER = 'root'
-    MYSQL_PASSWORD = 'Mihirneo8070*'
+    MYSQL_PASSWORD = 'XXXXXX'
 
     logging.info("=== Weather App Started ===")
 
