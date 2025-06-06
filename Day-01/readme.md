@@ -14,4 +14,4 @@ OOPs Python
 - Practice simple class-based programs
 
 File Handling
-- Halfway done
+- Read and write the txt file.

@@ -131,3 +131,14 @@
 2025-06-05 19:44:05,607 - INFO - Successfully inserted into MySql for Mumbai 
 2025-06-05 19:44:05,635 - INFO - Aggregation queries executed successfully 
 2025-06-05 19:44:05,639 - INFO - === Weather App Finished === 
+2025-06-06 11:23:42,262 - INFO - === Weather App Started === 
+2025-06-06 11:23:42,295 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-06 11:23:42,313 - INFO - Weather data saved to weather_data.csv 
+2025-06-06 11:24:34,195 - INFO - === Weather App Started === 
+2025-06-06 11:24:34,213 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-06 11:24:34,218 - INFO - Weather data saved to weather_data.csv 
+2025-06-06 11:24:34,218 - INFO - Connecting to MySQL... 
+2025-06-06 11:24:59,686 - INFO - === Weather App Started === 
+2025-06-06 11:24:59,728 - INFO - Weather data fetched successfully for Mumbai 
+2025-06-06 11:24:59,735 - INFO - Weather data saved to weather_data.csv 
+2025-06-06 11:24:59,735 - INFO - Connecting to MySQL... 
