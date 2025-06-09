@@ -1,0 +1,413 @@
+2025-06-09 15:06:26,522 - INFO - Connected to the database successfully
+2025-06-09 15:06:26,524 - ERROR - Faced error while calling Stored Procedure `DELIMITER //
+CREATE PROCEDURE GetEmpAboveDeptAvgSalary()
+BEGIN
+    SELECT e.eid, e.ename, e.salary, e.deptid
+    FROM emp e
+    JOIN (
+        SELECT deptid, AVG(salary) AS avg_sal
+        FROM emp
+        GROUP BY deptid
+    ) avg_dept ON e.deptid = avg_dept.deptid
+    WHERE e.salary > avg_dept.avg_sal;
+END //
+DELIMITER ;`: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '//\nCREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, ' at line 1")
+2025-06-09 15:06:26,524 - INFO - Database connection closed.
+2025-06-09 15:07:38,155 - INFO - Connected to the database successfully
+2025-06-09 15:07:38,156 - ERROR - Faced error while calling Stored Procedure `
+CREATE PROCEDURE GetEmpAboveDeptAvgSalary()
+BEGIN
+    SELECT e.eid, e.ename, e.salary, e.deptid
+    FROM emp e
+    JOIN (
+        SELECT deptid, AVG(salary) AS avg_sal
+        FROM emp
+        GROUP BY deptid
+    ) avg_dept ON e.deptid = avg_dept.deptid
+    WHERE e.salary > avg_dept.avg_sal;
+END;`: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:07:38,156 - INFO - Database connection closed.
+2025-06-09 15:07:43,817 - INFO - Connected to the database successfully
+2025-06-09 15:07:43,817 - ERROR - Faced error while calling Stored Procedure `
+CREATE PROCEDURE GetEmpAboveDeptAvgSalary()
+BEGIN
+    SELECT e.eid, e.ename, e.salary, e.deptid
+    FROM emp e
+    JOIN (
+        SELECT deptid, AVG(salary) AS avg_sal
+        FROM emp
+        GROUP BY deptid
+    ) avg_dept ON e.deptid = avg_dept.deptid
+    WHERE e.salary > avg_dept.avg_sal;
+END;`: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:07:43,824 - INFO - Database connection closed.
+2025-06-09 15:07:47,242 - INFO - Connected to the database successfully
+2025-06-09 15:07:47,242 - ERROR - Faced error while calling Stored Procedure `
+CREATE PROCEDURE GetEmpAboveDeptAvgSalary()
+BEGIN
+    SELECT e.eid, e.ename, e.salary, e.deptid
+    FROM emp e
+    JOIN (
+        SELECT deptid, AVG(salary) AS avg_sal
+        FROM emp
+        GROUP BY deptid
+    ) avg_dept ON e.deptid = avg_dept.deptid
+    WHERE e.salary > avg_dept.avg_sal;
+END;`: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:07:47,242 - INFO - Database connection closed.
+2025-06-09 15:29:26,017 - INFO - Connected to the database successfully
+2025-06-09 15:29:26,020 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:29:26,023 - INFO - Database connection closed.
+2025-06-09 15:29:26,049 - INFO - Connected to the database successfully
+2025-06-09 15:29:26,075 - ERROR - Faced error while calling Stored Procedure `GetEmpAboveDeptAvgSalary`: (1305, 'PROCEDURE stdcourse_db.GetEmpAboveDeptAvgSalary does not exist')
+2025-06-09 15:29:26,083 - INFO - Database connection closed.
+2025-06-09 15:31:18,682 - INFO - Connected to the database successfully
+2025-06-09 15:31:18,683 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:31:18,683 - INFO - Database connection closed.
+2025-06-09 15:31:18,705 - INFO - Connected to the database successfully
+2025-06-09 15:31:18,705 - ERROR - Faced error while calling Stored Procedure `GetEmpAboveDeptAvgSalary`: (1305, 'PROCEDURE stdcourse_db.GetEmpAboveDeptAvgSalary does not exist')
+2025-06-09 15:31:18,711 - INFO - Database connection closed.
+2025-06-09 15:39:56,216 - INFO - Connected to the database successfully
+2025-06-09 15:39:56,219 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:39:56,221 - INFO - Database connection closed.
+2025-06-09 15:39:56,226 - INFO - Connected to the database successfully
+2025-06-09 15:39:56,230 - ERROR - Faced error while calling Stored Procedure `GetEmpAboveDeptAvgSalary`: (1305, 'PROCEDURE stdcourse_db.GetEmpAboveDeptAvgSalary does not exist')
+2025-06-09 15:39:56,231 - INFO - Database connection closed.
+2025-06-09 15:40:03,801 - INFO - Connected to the database successfully
+2025-06-09 15:40:03,803 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:40:03,805 - INFO - Database connection closed.
+2025-06-09 15:40:03,823 - INFO - Connected to the database successfully
+2025-06-09 15:40:03,823 - ERROR - Faced error while calling Stored Procedure `GetEmpAboveDeptAvgSalary`: (1305, 'PROCEDURE stdcourse_db.GetEmpAboveDeptAvgSalary does not exist')
+2025-06-09 15:40:03,823 - INFO - Database connection closed.
+2025-06-09 15:40:34,594 - INFO - Connected to the database successfully
+2025-06-09 15:40:34,597 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:40:34,597 - INFO - Database connection closed.
+2025-06-09 15:40:34,602 - INFO - Connected to the database successfully
+2025-06-09 15:40:34,602 - ERROR - Faced error while calling Stored Procedure `GetEmpAboveDeptAvgSalary`: (1305, 'PROCEDURE stdcourse_db.GetEmpAboveDeptAvgSalary does not exist')
+2025-06-09 15:40:34,612 - INFO - Database connection closed.
+2025-06-09 15:42:32,991 - INFO - Connected to the database successfully
+2025-06-09 15:42:32,991 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE PROCEDURE GetEmpAboveDeptAvgSalary()\nBEGIN\n    SELECT e.eid, e.ename, e.s' at line 2")
+2025-06-09 15:42:32,991 - INFO - Database connection closed.
+2025-06-09 15:42:33,010 - INFO - Connected to the database successfully
+2025-06-09 15:42:33,010 - ERROR - Faced error while calling Stored Procedure `GetEmpAboveDeptAvgSalary`: (1305, 'PROCEDURE stdcourse_db.GetEmpAboveDeptAvgSalary does not exist')
+2025-06-09 15:42:33,010 - INFO - Database connection closed.
+2025-06-09 15:42:53,232 - INFO - Connected to the database successfully
+2025-06-09 15:42:53,259 - INFO - Query executed successfully.
+2025-06-09 15:42:53,259 - INFO - Database connection closed.
+2025-06-09 15:42:53,279 - INFO - Connected to the database successfully
+2025-06-09 15:42:53,279 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 15:42:53,287 - INFO - Database connection closed.
+2025-06-09 15:44:34,053 - INFO - Connected to the database successfully
+2025-06-09 15:44:34,057 - ERROR - Faced an Error executing query: (1304, 'PROCEDURE GetEmpAboveDeptAvgSalary already exists')
+2025-06-09 15:44:34,061 - INFO - Database connection closed.
+2025-06-09 15:44:34,078 - INFO - Connected to the database successfully
+2025-06-09 15:44:34,078 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 15:44:34,078 - INFO - Database connection closed.
+2025-06-09 15:45:08,444 - INFO - Connected to the database successfully
+2025-06-09 15:45:08,447 - ERROR - Faced an Error executing query: (1304, 'PROCEDURE GetEmpAboveDeptAvgSalary already exists')
+2025-06-09 15:45:08,450 - INFO - Database connection closed.
+2025-06-09 15:45:08,478 - INFO - Connected to the database successfully
+2025-06-09 15:45:08,481 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 15:45:08,481 - INFO - Database connection closed.
+2025-06-09 15:48:54,034 - INFO - Connected to the database successfully
+2025-06-09 15:48:54,038 - ERROR - Faced an Error executing query: (1304, 'PROCEDURE GetEmpAboveDeptAvgSalary already exists')
+2025-06-09 15:48:54,041 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 15:48:54,041 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 15:48:54,041 - INFO - Database connection closed.
+2025-06-09 15:59:49,594 - INFO - Connected to the database successfully
+2025-06-09 15:59:49,622 - INFO - Query executed successfully.
+2025-06-09 15:59:49,625 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 15:59:49,625 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 15:59:49,633 - INFO - Database connection closed.
+2025-06-09 16:02:28,713 - INFO - Connected to the database successfully
+2025-06-09 16:02:28,742 - INFO - Query executed successfully.
+2025-06-09 16:02:28,745 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 16:02:28,745 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 16:02:28,745 - INFO - Database connection closed.
+2025-06-09 16:02:46,661 - INFO - Connected to the database successfully
+2025-06-09 16:02:46,688 - INFO - Query executed successfully.
+2025-06-09 16:02:46,688 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 16:02:46,696 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 16:02:46,696 - INFO - Database connection closed.
+2025-06-09 16:04:15,084 - INFO - Connected to the database successfully
+2025-06-09 16:04:15,103 - INFO - Query executed successfully.
+2025-06-09 16:04:15,108 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 16:04:15,112 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 16:04:15,115 - INFO - Database connection closed.
+2025-06-09 16:04:16,035 - INFO - Connected to the database successfully
+2025-06-09 16:04:16,054 - INFO - Query executed successfully.
+2025-06-09 16:04:16,054 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 16:04:16,054 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 16:04:16,054 - INFO - Database connection closed.
+2025-06-09 16:04:22,203 - INFO - Connected to the database successfully
+2025-06-09 16:04:22,220 - INFO - Query executed successfully.
+2025-06-09 16:04:22,220 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 16:04:22,220 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 16:04:22,228 - INFO - Database connection closed.
+2025-06-09 16:06:00,285 - INFO - Connected to the database successfully
+2025-06-09 16:06:00,301 - INFO - Query executed successfully.
+2025-06-09 16:06:00,301 - INFO - Called Stored Procedure `GetEmpAboveDeptAvgSalary` without parameters
+2025-06-09 16:06:00,301 - INFO - Stored Procedure `GetEmpAboveDeptAvgSalary` returned a result set
+2025-06-09 16:06:00,309 - INFO - Database connection closed.
+2025-06-09 16:12:45,488 - INFO - Connected to the database successfully
+2025-06-09 16:12:45,490 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'END' at line 9")
+2025-06-09 16:12:45,495 - ERROR - Faced error while calling Stored Procedure `DeptwithHighAvgSal`: (1305, 'PROCEDURE stdcourse_db.DeptwithHighAvgSal does not exist')
+2025-06-09 16:12:45,496 - INFO - Database connection closed.
+2025-06-09 16:13:05,347 - INFO - Connected to the database successfully
+2025-06-09 16:13:05,367 - INFO - Query executed successfully.
+2025-06-09 16:13:05,376 - ERROR - Faced error while calling Stored Procedure `DeptwithHighAvgSal`: (1305, 'PROCEDURE stdcourse_db.DeptwithHighAvgSal does not exist')
+2025-06-09 16:13:05,376 - INFO - Database connection closed.
+2025-06-09 16:14:48,192 - INFO - Connected to the database successfully
+2025-06-09 16:14:48,204 - INFO - Query executed successfully.
+2025-06-09 16:14:48,213 - INFO - Called Stored Procedure `DeptwthHighAvgSal` without parameters
+2025-06-09 16:14:48,215 - INFO - Stored Procedure `DeptwthHighAvgSal` returned a result set
+2025-06-09 16:14:48,217 - INFO - Database connection closed.
+2025-06-09 16:21:15,045 - INFO - Connected to the database successfully
+2025-06-09 16:21:15,049 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'END' at line 7")
+2025-06-09 16:21:15,053 - ERROR - Faced error while calling Stored Procedure `IncSalbyPer`: (1305, 'PROCEDURE stdcourse_db.IncSalbyPer does not exist')
+2025-06-09 16:21:15,056 - INFO - Database connection closed.
+2025-06-09 16:21:35,969 - INFO - Connected to the database successfully
+2025-06-09 16:21:36,003 - INFO - Query executed successfully.
+2025-06-09 16:21:36,006 - ERROR - Faced error while calling Stored Procedure `IncSalbyPer`: (1318, 'Incorrect number of arguments for PROCEDURE stdcourse_db.IncSalbyPer; expected 2, got 0')
+2025-06-09 16:21:36,006 - INFO - Database connection closed.
+2025-06-09 16:23:09,794 - INFO - Connected to the database successfully
+2025-06-09 16:23:09,812 - INFO - Query executed successfully.
+2025-06-09 16:23:09,812 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:23:09,812 - INFO - Database connection closed.
+2025-06-09 16:23:40,722 - INFO - Connected to the database successfully
+2025-06-09 16:23:40,733 - INFO - Query executed successfully.
+2025-06-09 16:23:40,739 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:23:40,744 - INFO - Database connection closed.
+2025-06-09 16:25:20,721 - INFO - Connected to the database successfully
+2025-06-09 16:25:20,733 - INFO - Query executed successfully.
+2025-06-09 16:25:20,737 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:25:20,737 - INFO - Database connection closed.
+2025-06-09 16:25:51,853 - INFO - Connected to the database successfully
+2025-06-09 16:25:51,858 - INFO - Query executed successfully.
+2025-06-09 16:25:51,864 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:25:51,864 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:25:51,873 - INFO - Database connection closed.
+2025-06-09 16:30:04,029 - INFO - Connected to the database successfully
+2025-06-09 16:30:04,040 - INFO - Query executed successfully.
+2025-06-09 16:30:04,048 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:30:04,054 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:30:04,058 - INFO - Database connection closed.
+2025-06-09 16:30:06,763 - INFO - Connected to the database successfully
+2025-06-09 16:30:06,787 - INFO - Query executed successfully.
+2025-06-09 16:30:06,793 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:30:06,793 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:30:06,793 - INFO - Database connection closed.
+2025-06-09 16:30:07,348 - INFO - Connected to the database successfully
+2025-06-09 16:30:07,379 - INFO - Query executed successfully.
+2025-06-09 16:30:07,384 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:30:07,384 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:30:07,387 - INFO - Database connection closed.
+2025-06-09 16:30:08,896 - INFO - Connected to the database successfully
+2025-06-09 16:30:08,913 - INFO - Query executed successfully.
+2025-06-09 16:30:08,921 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:30:08,923 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:30:08,926 - INFO - Database connection closed.
+2025-06-09 16:30:11,483 - INFO - Connected to the database successfully
+2025-06-09 16:30:11,488 - INFO - Query executed successfully.
+2025-06-09 16:30:11,496 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 10)
+2025-06-09 16:30:11,496 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:30:11,499 - INFO - Database connection closed.
+2025-06-09 16:30:25,106 - INFO - Connected to the database successfully
+2025-06-09 16:30:25,115 - INFO - Query executed successfully.
+2025-06-09 16:30:25,115 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:30:25,115 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:30:25,126 - INFO - Database connection closed.
+2025-06-09 16:30:46,041 - INFO - Connected to the database successfully
+2025-06-09 16:30:46,073 - INFO - Query executed successfully.
+2025-06-09 16:30:46,080 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:30:46,082 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:30:46,082 - INFO - Database connection closed.
+2025-06-09 16:31:44,116 - INFO - Connected to the database successfully
+2025-06-09 16:31:44,147 - INFO - Query executed successfully.
+2025-06-09 16:31:44,153 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:31:44,153 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:31:44,153 - INFO - Database connection closed.
+2025-06-09 16:34:07,963 - INFO - Connected to the database successfully
+2025-06-09 16:34:07,986 - INFO - Query executed successfully.
+2025-06-09 16:34:07,998 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:34:07,998 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:34:07,998 - INFO - Database connection closed.
+2025-06-09 16:34:15,998 - INFO - Connected to the database successfully
+2025-06-09 16:34:16,007 - INFO - Query executed successfully.
+2025-06-09 16:34:16,007 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:34:16,013 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:34:16,015 - INFO - Database connection closed.
+2025-06-09 16:34:16,790 - INFO - Connected to the database successfully
+2025-06-09 16:34:16,805 - INFO - Query executed successfully.
+2025-06-09 16:34:16,805 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:34:16,805 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:34:16,816 - INFO - Database connection closed.
+2025-06-09 16:34:45,223 - INFO - Connected to the database successfully
+2025-06-09 16:34:45,229 - INFO - Query executed successfully.
+2025-06-09 16:34:45,237 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:34:45,237 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:34:45,237 - INFO - 21 rows affected by Stored Procedure `IncSalbyPer`
+2025-06-09 16:34:45,245 - INFO - Database connection closed.
+2025-06-09 16:36:52,130 - INFO - Connected to the database successfully
+2025-06-09 16:36:52,135 - INFO - Query executed successfully.
+2025-06-09 16:36:52,136 - INFO - Called Stored Procedure `IncSalbyPer` with params ('HR', 20)
+2025-06-09 16:36:52,146 - INFO - Stored Procedure `IncSalbyPer` executed successfully but returned no result set
+2025-06-09 16:36:52,146 - INFO - 21 rows affected by Stored Procedure `IncSalbyPer`
+2025-06-09 16:36:52,152 - INFO - Database connection closed.
+2025-06-09 16:42:20,890 - INFO - Connected to the database successfully
+2025-06-09 16:42:20,892 - ERROR - Faced an Error executing query: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'BEGIN\n    select e.ename, e.deptid, e.salary\n    from emp e\n    join (\n    selec' at line 2")
+2025-06-09 16:42:20,895 - ERROR - Faced error while calling Stored Procedure `EmpDupSal`: (1305, 'PROCEDURE stdcourse_db.EmpDupSal does not exist')
+2025-06-09 16:42:20,897 - INFO - Database connection closed.
+2025-06-09 16:43:16,460 - INFO - Connected to the database successfully
+2025-06-09 16:43:16,466 - INFO - Query executed successfully.
+2025-06-09 16:43:16,466 - INFO - Called Stored Procedure `EmpDupSal` without parameters
+2025-06-09 16:43:16,466 - INFO - Stored Procedure `EmpDupSal` executed successfully but returned no result set
+2025-06-09 16:43:16,476 - INFO - 0 rows affected by Stored Procedure `EmpDupSal`
+2025-06-09 16:43:16,480 - INFO - Database connection closed.
+2025-06-09 16:44:35,758 - INFO - Connected to the database successfully
+2025-06-09 16:44:35,788 - INFO - Query executed successfully.
+2025-06-09 16:44:35,791 - INFO - Called Stored Procedure `EmpDupSal` without parameters
+2025-06-09 16:44:35,795 - INFO - Stored Procedure `EmpDupSal` returned a result set
+2025-06-09 16:44:35,795 - INFO - Database connection closed.
+2025-06-09 16:51:55,855 - INFO - Connected to the database successfully
+2025-06-09 16:51:55,871 - INFO - Query executed successfully.
+2025-06-09 16:51:55,878 - ERROR - Faced error while calling Stored Procedure `DeptStats`: (1318, 'Incorrect number of arguments for PROCEDURE stdcourse_db.DeptStats; expected 1, got 7')
+2025-06-09 16:51:55,878 - INFO - Database connection closed.
+2025-06-09 16:52:15,194 - INFO - Connected to the database successfully
+2025-06-09 16:52:15,225 - INFO - Query executed successfully.
+2025-06-09 16:52:15,225 - ERROR - Faced error while calling Stored Procedure `DeptStats`: (1318, 'Incorrect number of arguments for PROCEDURE stdcourse_db.DeptStats; expected 1, got 7')
+2025-06-09 16:52:15,231 - INFO - Database connection closed.
+2025-06-09 16:53:01,409 - INFO - Connected to the database successfully
+2025-06-09 16:53:01,432 - INFO - Query executed successfully.
+2025-06-09 16:53:01,441 - ERROR - Faced error while calling Stored Procedure `DeptStats`: (1318, 'Incorrect number of arguments for PROCEDURE stdcourse_db.DeptStats; expected 1, got 7')
+2025-06-09 16:53:01,447 - INFO - Database connection closed.
+2025-06-09 16:53:14,968 - INFO - Connected to the database successfully
+2025-06-09 16:53:14,978 - INFO - Query executed successfully.
+2025-06-09 16:53:14,978 - INFO - Called Stored Procedure `DeptStats` with params ('Finance',)
+2025-06-09 16:53:14,983 - INFO - Stored Procedure `DeptStats` returned a result set
+2025-06-09 16:53:14,986 - INFO - Database connection closed.
+2025-06-09 17:20:00,105 - INFO - Connected to the database successfully
+2025-06-09 17:20:00,135 - INFO - Executed query: CREATE VIEW emp_basic_view AS SELECT eid, ename, salary FROM emp
+2025-06-09 17:20:00,143 - INFO - Executed query: CREATE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:20:00,143 - INFO - Executed query: CREATE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:20:00,151 - INFO - All queries executed successfully.
+2025-06-09 17:21:28,346 - INFO - Connected to the database successfully
+2025-06-09 17:21:28,352 - ERROR - Error executing queries: (1050, "Table 'emp_basic_view' already exists")
+2025-06-09 17:21:56,747 - INFO - Connected to the database successfully
+2025-06-09 17:21:56,752 - ERROR - Error executing queries: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'or replace emp_basic_view AS SELECT eid, ename, salary FROM emp' at line 1")
+2025-06-09 17:23:03,872 - INFO - Connected to the database successfully
+2025-06-09 17:23:03,874 - ERROR - Error executing queries: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'OR REPLACE emp_basic_view AS SELECT eid, ename, salary FROM emp' at line 1")
+2025-06-09 17:24:06,900 - INFO - Connected to the database successfully
+2025-06-09 17:24:06,918 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid, ename, salary FROM emp
+2025-06-09 17:24:06,918 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:24:06,936 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:24:06,936 - INFO - All queries executed successfully.
+2025-06-09 17:25:24,987 - INFO - Connected to the database successfully
+2025-06-09 17:25:25,021 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid, ename, salary FROM emp
+2025-06-09 17:25:25,029 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:25:25,041 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:25:25,041 - ERROR - Error executing queries: (1054, "Unknown column 'View' in 'field list'")
+2025-06-09 17:26:23,230 - INFO - Connected to the database successfully
+2025-06-09 17:26:23,249 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid, ename, salary FROM emp
+2025-06-09 17:26:23,260 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:26:23,272 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:26:23,280 - INFO - SELECT query executed: SELECT * from emp_basic_view
+2025-06-09 17:26:23,281 - INFO - All queries executed successfully.
+2025-06-09 17:26:37,007 - INFO - Connected to the database successfully
+2025-06-09 17:26:37,044 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid, ename, salary FROM emp
+2025-06-09 17:26:37,058 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:26:37,064 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:26:37,073 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:26:37,073 - INFO - All queries executed successfully.
+2025-06-09 17:27:59,833 - INFO - Connected to the database successfully
+2025-06-09 17:27:59,868 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid, ename, salary FROM emp
+2025-06-09 17:27:59,882 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:27:59,882 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:27:59,899 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:27:59,899 - INFO - Non-SELECT query executed: UPDATE emp_basic_view SET salary = 9999 WHERE eid = 1
+2025-06-09 17:27:59,908 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:27:59,913 - INFO - All queries executed successfully.
+2025-06-09 17:28:31,646 - INFO - Connected to the database successfully
+2025-06-09 17:28:31,679 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid ename, salary FROM emp
+2025-06-09 17:28:31,694 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:28:31,706 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:28:31,707 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:28:31,716 - INFO - Non-SELECT query executed: UPDATE emp_basic_view SET salary = 9999 WHERE eid = 1
+2025-06-09 17:28:31,716 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:28:31,716 - INFO - All queries executed successfully.
+2025-06-09 17:28:35,794 - INFO - Connected to the database successfully
+2025-06-09 17:28:35,832 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:28:35,842 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:28:35,854 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:28:35,860 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:28:35,860 - INFO - Non-SELECT query executed: UPDATE emp_basic_view SET salary = 9999 WHERE eid = 1
+2025-06-09 17:28:35,860 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:28:35,860 - INFO - All queries executed successfully.
+2025-06-09 17:29:04,753 - INFO - Connected to the database successfully
+2025-06-09 17:29:04,784 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:29:04,803 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:29:04,811 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:29:04,819 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:29:04,821 - INFO - Non-SELECT query executed: UPDATE emp_basic_view SET salary = 999 WHERE eid = 1
+2025-06-09 17:29:04,821 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:29:04,827 - INFO - All queries executed successfully.
+2025-06-09 17:31:04,805 - INFO - Connected to the database successfully
+2025-06-09 17:31:04,820 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:31:04,835 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:31:04,844 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:31:04,853 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:31:04,853 - INFO - Non-SELECT query executed: UPDATE emp_basic_view SET salary = 999 WHERE eid = 1
+2025-06-09 17:31:04,853 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:31:04,862 - ERROR - Error executing queries: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'RENAME TO join_view' at line 1")
+2025-06-09 17:32:14,136 - INFO - Connected to the database successfully
+2025-06-09 17:32:14,171 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:32:14,183 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:32:14,187 - INFO - Non-SELECT query executed: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:32:14,202 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:32:14,202 - INFO - Non-SELECT query executed: UPDATE emp_basic_view SET salary = 999 WHERE eid = 1
+2025-06-09 17:32:14,202 - INFO - SELECT query executed: SELECT * from emp_basic_view limit 10
+2025-06-09 17:32:14,219 - INFO - Non-SELECT query executed: RENAME TABLE emp_dept_view TO join_view
+2025-06-09 17:32:14,219 - INFO - Non-SELECT query executed: show tables
+2025-06-09 17:32:14,240 - INFO - Non-SELECT query executed: Drop view avg_salary_dept
+2025-06-09 17:32:14,240 - INFO - Non-SELECT query executed: show tables
+2025-06-09 17:32:14,240 - INFO - All queries executed successfully.
+2025-06-09 17:34:00,157 - INFO - Connected to the database successfully
+2025-06-09 17:34:00,175 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:34:00,188 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:34:00,196 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:34:00,196 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:34:00,196 - INFO - Query executed with no result set: UPDATE emp_basic_view SET salary = 999 WHERE eid = 1
+2025-06-09 17:34:00,205 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:34:00,205 - ERROR - Error executing queries: (1050, "Table 'join_view' already exists")
+2025-06-09 17:34:34,682 - INFO - Connected to the database successfully
+2025-06-09 17:34:34,764 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:34:34,783 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:34:34,783 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:34:34,791 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:34:34,793 - INFO - Query executed with no result set: UPDATE emp_basic_view SET salary = 999 WHERE eid = 1
+2025-06-09 17:34:34,796 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:34:34,805 - INFO - Query executed with no result set: RENAME TABLE emp_dept_view TO join_view
+2025-06-09 17:34:34,810 - INFO - Query returned result set: show tables
+2025-06-09 17:34:34,810 - INFO - Query executed with no result set: Drop view avg_salary_dept
+2025-06-09 17:34:34,810 - INFO - Query returned result set: show tables
+2025-06-09 17:34:34,810 - INFO - All queries executed successfully.
+2025-06-09 17:35:22,220 - INFO - Connected to the database successfully
+2025-06-09 17:35:22,254 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:35:22,262 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:35:22,270 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:35:22,270 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:35:22,278 - INFO - Query executed with no result set: UPDATE emp_basic_view SET salary = 999 WHERE eid = 1
+2025-06-09 17:35:22,281 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:35:22,282 - ERROR - Error executing queries: (1050, "Table 'join_view' already exists")
+2025-06-09 17:35:37,232 - INFO - Connected to the database successfully
+2025-06-09 17:35:37,252 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_basic_view AS SELECT eid,deptid, ename, salary FROM emp
+2025-06-09 17:35:37,257 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW emp_dept_view AS SELECT e.eid, e.ename, e.salary, d.deptname FROM emp e JOIN dept d ON e.deptid = d.deptid
+2025-06-09 17:35:37,273 - INFO - Query executed with no result set: CREATE OR REPLACE VIEW avg_salary_dept AS  SELECT d.deptname, AVG(e.salary) AS avg_salary FROM emp e JOIN dept d ON e.deptid = d.deptid GROUP BY d.deptname
+2025-06-09 17:35:37,278 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:35:37,280 - INFO - Query executed with no result set: UPDATE emp_basic_view SET salary = 999 WHERE eid = 1
+2025-06-09 17:35:37,280 - INFO - Query returned result set: SELECT * from emp_basic_view limit 10
+2025-06-09 17:35:37,293 - INFO - Query executed with no result set: RENAME TABLE emp_dept_view TO join_view
+2025-06-09 17:35:37,294 - INFO - Query returned result set: show tables
+2025-06-09 17:35:37,312 - INFO - Query executed with no result set: Drop view join_view
+2025-06-09 17:35:37,313 - INFO - Query returned result set: show tables
+2025-06-09 17:35:37,319 - INFO - All queries executed successfully.

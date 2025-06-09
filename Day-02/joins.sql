@@ -840,13 +840,13 @@ Cross Join: All possible Courses + Enrollments combination
 ('Educational psychologist', 'A')
 
 
-Left Anti Join: All students who are not enrolled in any course
+-- Left Anti Join: All students who are not enrolled in any course
 (28, 'Maria Jackson')
 (29, 'Mckenzie Greer')
 (30, 'Amy Whitaker')
 
 
-Left Anti Join: All students who haven't received any grade
+-- Left Anti Join: All students who haven't received any grade
 (28, 'Maria Jackson')
 (29, 'Mckenzie Greer')
 (30, 'Amy Whitaker')
@@ -859,3 +859,113 @@ Right Anti Join: Courses that have no students enrolled
 
 Right Anti Join: Enrollments with students id not in Students table
 No results found.
+
+Union: Students and Course Instructor Name (No duplicates)
+('John Gill',)
+('Jessica Garner',)
+('Gregory Scott',)
+('Nathan Ray MD',)
+('Carrie Gray',)
+('Nathan Melton',)
+('Crystal Clark',)
+('Kelly Hart',)
+('Kimberly Smith',)
+('David Patterson',)
+('Sarah Miller',)
+('Susan Cole',)
+('Kevin Long',)
+('Sherry Lopez',)
+('John Wells',)
+('Megan Gomez',)
+('Richard Page DDS',)
+('Crystal Perez',)
+('Joseph Morris',)
+('Gregory Sanford',)
+('Ashley Scott',)
+('Pamela Ward',)
+('Garrett Lee',)
+('Mariah Long',)
+('Daniel Peterson',)
+('Stephen Cook',)
+('Emily Perez',)
+('Jessica Winters',)
+('Thomas Singh',)
+('Adam Walters',)
+('Andrew Villanueva',)
+('Kathleen Wells',)
+('Anita Williams',)
+('Evan Nicholson',)
+('Steven Simon',)
+('Nicole Maynard',)
+('Russell Jackson',)
+Union: Students and Course Instructor Name (with duplicates)
+('John Gill',)
+('Jessica Garner',)
+('Gregory Scott',)
+('Nathan Ray MD',)
+('Carrie Gray',)
+('Nathan Melton',)
+('Crystal Clark',)
+('Kelly Hart',)
+('Kimberly Smith',)
+('David Patterson',)
+('Sarah Miller',)
+('Susan Cole',)
+('Kevin Long',)
+('Sherry Lopez',)
+('John Wells',)
+('Megan Gomez',)
+('Richard Page DDS',)
+('Crystal Perez',)
+('Joseph Morris',)
+('Gregory Sanford',)
+('Ashley Scott',)
+('Pamela Ward',)
+('Garrett Lee',)
+('Mariah Long',)
+('Daniel Peterson',)
+('Stephen Cook',)
+('Emily Perez',)
+('Jessica Winters',)
+('Thomas Singh',)
+('Adam Walters',)
+('Andrew Villanueva',)
+('Kathleen Wells',)
+('Anita Williams',)
+('Evan Nicholson',)
+('Steven Simon',)
+('Nicole Maynard',)
+('Russell Jackson',)
+
+
+-- Students who are not enrolled in any course--
+Select s.id, s.name
+from students s
+left join enrollments e on s.id = e.student_id
+where e.student_id is null;
+
+-- or --
+
+SELECT *
+FROM students s
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM enrollments e
+    WHERE s.id = e.student_id
+);
+
+-- Courses where no students are enrolled--
+Select c.id, c.title
+from courses c
+left join enrollments e on c.id = e.course_id
+where e.course_id is null;
+
+-- or --
+
+select c.*
+from courses c
+where not exists(
+	select 1 
+	from enrollments e
+	where c.id = e.course_id
+);

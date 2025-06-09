@@ -1,5 +1,4 @@
 from db_connection import load_db_connection
-import pymysql
 
 def execute_query(cursor, title, query):
     print(f"{title}")
@@ -144,7 +143,34 @@ def run_join_queries():
             left join students s on s.id = e.student_id
             where s.id is null
             """
+        },
+        {
+            "title":"Union: Students and Course Instructor Name (No duplicates)",
+            "sql":"""
+            select s.name from students s
+            union
+            select c.instructor_name from courses c
+            """
+        },
+        {
+            "title":"Union: Students and Course Instructor Name (with duplicates)",
+            "sql":"""
+            select s.name from students s
+            union all
+            select c.instructor_name from courses c
+            """
+        },
+        {
+            "title":"Finding students with the same age",
+            "sql":"""
+            SELECT s1.id AS student1_id, s1.name AS student1_name,
+            s2.id AS student2_id, s2.name AS student2_name,
+            s1.age
+            FROM students s1
+            JOIN students s2 ON s1.age = s2.age AND s1.id < s2.id;
+            """
         }
+
     ]
 
     for q in queries:
