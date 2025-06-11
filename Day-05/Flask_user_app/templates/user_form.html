@@ -1,0 +1,19 @@
+<!-- templates/user_form.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Lookup</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Search User Info</h2>
+        <form method="POST">
+            <input type="text" name="username" placeholder="Enter username" required>
+            <button type="submit">Search</button>
+        </form>
+
+        <a href="{{ url_for('home') }}">Back to Home</a>
+    </div>
+</body>
+</html>

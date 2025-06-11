@@ -1,0 +1,25 @@
+<!-- templates/user_result.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Result</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        {% if user %}
+            <h2>User Info Found:</h2>
+            <p><strong>Name:</strong> {{ user.name }}</p>
+            <p><strong>Age:</strong> {{ user.age }}</p>
+            <p><strong>City:</strong> {{ user.city }}</p>
+            <p><strong>Role:</strong> {{ user.role }}</p>
+        {% else %}
+            <h2>No user found with username "{{ username }}"</h2>
+        {% endif %}
+
+        <!-- 👇 Navigation links -->
+        <a href="{{ url_for('user_form') }}">Search Another</a>
+        <a href="{{ url_for('home') }}"> Back to Home</a>
+    </div>
+</body>
+</html>
