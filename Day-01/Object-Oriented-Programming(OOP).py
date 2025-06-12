@@ -71,47 +71,47 @@ print(meet.reschedule("Wednesday"))
 
 # Single Inheritance
 
-class Parent():
+class Google():
     def __init__(self):
-        print("In Parent Constructor")
+        print("In Google Constructor")
     def disp1(self):
         print("In disp1")
 
-class Child(Parent):
+class YouTube(Google):
     def disp2(self):
         print("In disp2")
 
-chd = Child()  # Even though the Child has not defined it's own init, it's inheriting it's Parent init method(Constructor)
-chd.disp1() #Child can also inherit Parent's other methods
+chd = YouTube()  # Even though the YouTube has not defined it's own init, it's inheriting it's Google init method(Constructor)
+chd.disp1() #YouTube can also inherit Google's other methods
 chd.disp2()
 
 print("------------------------")
 
 # Multiple Inheritance
 
-class Father():
+class Google1():
     def __init__(self):
-        print("In Father Constructor")
+        print("In Google1 Constructor")
 
     def disp1(self):
         print("In disp1")
 
-class Mother():
+class Google2():
     def __init__(self):
-        print("In Mother Constructor")
+        print("In Google2 Constructor")
 
     def disp2(self):
         print("In disp2")
 
-class Child(Father, Mother):
+class YouTube(Google1, Google2):
     def __init__(self):
         super().__init__() # Super can be called on Any line
-        Mother.__init__(self) # We need to explicitly call second Parent constructor if needed
+        Google2.__init__(self) # We need to explicitly call second Parent constructor if needed
     def disp3(self):
         print("In disp3")
     
 
-chd2 = Child()
+chd2 = YouTube()
 chd2.disp1()
 chd2.disp2
 chd2.disp3()
@@ -120,29 +120,29 @@ print("--------------------------")
 
 # Multilevel Inheritance
 
-class GP():
+class Alphabet():
     def __init__(self):
-        print("In Grand Parent Constructor")
+        print("In Alphabet Constructor")
 
     def disp1(self):
         print("In disp1")
 
-class Parent(GP):
+class Google(Alphabet):
     def __init__(self):
-        print("In Parent Constructor")
+        print("In Google Constructor")
 
     def disp2(self):
         print("In disp2")
 
-class Child(Parent):
+class YouTube(Google):
     def __init__(self):
-        GP.__init__(self) # In this case, we need to explicitly call second GP constructor if needed
+        Alphabet.__init__(self) # In this case, we need to explicitly call Alphabet's constructor if needed
         super().__init__() # Super can be called on Any line
     def disp3(self):
         print("In disp3")
     
 
-chd3 = Child()
+chd3 = YouTube()
 chd3.disp1()
 chd3.disp2
 chd3.disp3()
