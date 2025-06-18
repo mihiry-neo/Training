@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from faker import Faker
 from sqlalchemy.orm import Session
 from models import Product, Category, PriceHistory
+from logger import log
 
 class DataGenerator:
     def __init__(self):
@@ -24,30 +25,33 @@ class DataGenerator:
             "DIY & Hardware": ["Tools", "Paint", "Electrical"],
             "Furniture": ["Bedroom", "Office", "Living Room"]
         }
-
         self.brand_names = [
             "Astra", "Zenex", "Nova", "UrbanMode", "GearPro",
             "CraftHaus", "NextEra", "Skyline", "PureEssence", "Flytek"
         ]
 
     def create_categories(self, db: Session) -> List[Category]:
+        log.info("Creating initial categories and subcategories...")
         categories = []
-        for main_name in self.global_categories:
-            main_cat = Category(name=main_name)
-            db.add(main_cat)
-            db.flush()
-            categories.append(main_cat)
-
-            sub_names = self.category_subcategories.get(main_name, [])
-            for sub in sub_names:
-                sub_cat = Category(name=f"{main_name} - {sub}", parent_id=main_cat.id)
-                db.add(sub_cat)
+        try:
+            for main_name in self.global_categories:
+                main_cat = Category(name=main_name)
+                db.add(main_cat)
                 db.flush()
-                categories.append(sub_cat)
+                categories.append(main_cat)
 
-        db.commit()
+                sub_names = self.category_subcategories.get(main_name, [])
+                for sub in sub_names:
+                    sub_cat = Category(name=f"{main_name} - {sub}", parent_id=main_cat.id)
+                    db.add(sub_cat)
+                    db.flush()
+                    categories.append(sub_cat)
+            db.commit()
+            log.info(f"Created {len(categories)} categories (including subcategories).")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Error while creating categories: {e}")
         return categories
-
 
     def generate_brand(self) -> str:
         return random.choice([
@@ -78,6 +82,9 @@ class DataGenerator:
         }
 
     def generate_product(self, categories: List[Category]) -> Dict[str, Any]:
+        if not categories:
+            log.warning("No categories found during product generation.")
+            raise ValueError("No categories available. Please create categories first.")
         category = random.choice(categories)
         return {
             "name": f"{self.faker.word().capitalize()} {self.faker.word().capitalize()}",
@@ -96,42 +103,67 @@ class DataGenerator:
         }
 
     def create_products(self, db: Session, categories: List[Category], count: int = 100) -> List[Product]:
+        log.info(f"Generating {count} product(s)...")
         products = []
-        for _ in range(count):
-            product_data = self.generate_product(categories)
-            product = Product(**product_data)
-            db.add(product)
-            products.append(product)
-
-        db.commit()
+        try:
+            for _ in range(count):
+                product_data = self.generate_product(categories)
+                product = Product(**product_data)
+                db.add(product)
+                products.append(product)
+            db.commit()
+            log.info(f"Successfully created {len(products)} products.")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Failed to create products: {e}")
         return products
 
     def update_product_price(self, db: Session, product: Product, reason: str = "random_update") -> None:
-        old_price = product.price
-        change_percent = random.uniform(-0.2, 0.2)
-        new_price = round(old_price * (1 + change_percent), 2)
-        new_price = max(new_price, 1.0)
+        try:
+            old_price = product.price
+            change_percent = random.uniform(-0.2, 0.2)
+            new_price = round(old_price * (1 + change_percent), 2)
+            new_price = max(new_price, 1.0)
 
-        price_history = PriceHistory(
-            product_id=product.id,
-            old_price=old_price,
-            new_price=new_price,
-            reason=reason
-        )
+            price_history = PriceHistory(
+                product_id=product.id,
+                old_price=old_price,
+                new_price=new_price,
+                reason=reason
+            )
 
-        product.price = new_price
-        db.add(price_history)
-        db.commit()
+            product.price = new_price
+            db.add(price_history)
+            db.commit()
+            log.info(f"Price updated for Product ID {product.id} from ₹{old_price} to ₹{new_price}")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Failed to update price for Product ID {product.id}: {e}")
 
     def update_stock_quantity(self, db: Session, product: Product) -> None:
-        change = random.randint(-50, 100)
-        new_quantity = max(0, product.stock_quantity + change)
-        product.stock_quantity = new_quantity
-        db.commit()
+        try:
+            change = random.randint(-50, 100)
+            new_quantity = max(0, product.stock_quantity + change)
+            product.stock_quantity = new_quantity
+            db.commit()
+            log.info(f"Stock updated for Product ID {product.id} to {new_quantity}")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Failed to update stock for Product ID {product.id}: {e}")
 
-    def generate_new_product(self, db: Session, categories: List[Category]) -> Product:
-        product_data = self.generate_product(categories)
-        product = Product(**product_data)
-        db.add(product)
-        db.commit()
-        return product
+    def get_categories(self, db: Session) -> List[Category]:
+        categories = db.query(Category).all()
+        log.info(f"Retrieved {len(categories)} categories from database.")
+        return categories
+
+    def randomly_update_prices(self, db: Session, products: List[Product], batch_size: int = 50) -> None:
+        log.info("Starting batch price update...")
+        selected = random.sample(products, min(batch_size, len(products)))
+        for product in selected:
+            self.update_product_price(db, product, reason="auto_scheduler")
+
+    def randomly_update_stocks(self, db: Session, products: List[Product], batch_size: int = 50) -> None:
+        log.info("Starting batch stock update...")
+        selected = random.sample(products, min(batch_size, len(products)))
+        for product in selected:
+            self.update_stock_quantity(db, product)

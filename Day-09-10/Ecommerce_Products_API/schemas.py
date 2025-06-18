@@ -2,6 +2,8 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+# =================== Category Schemas ===================
+
 class CategoryBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -10,14 +12,16 @@ class CategoryBase(BaseModel):
 class CategoryCreate(CategoryBase):
     pass
 
-class Category(CategoryCreate):
+class Category(CategoryBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
     children: List['Category'] = []
 
     class Config:
-        orm_mode = True
+        from_attribute = True
+
+# =================== Price History Schemas ===================
 
 class ProductPriceHistoryBase(BaseModel):
     old_price: float
@@ -32,28 +36,45 @@ class ProductPriceHistory(ProductPriceHistoryBase):
     class Config:
         from_attributes = True
 
+# =================== Product Schemas ===================
+
+class ProductAttributes(BaseModel):
+    color: str
+    weight: str
+    material: str
+    rating: float
 
 class ProductBase(BaseModel):
     name: str
-    description: Optional[str] = None
     price: float
     category_id: int
     brand: Optional[str] = None
     stock_quantity: int = 0
-    attributes: Optional[Dict[str, Any]] = None
+    attributes: ProductAttributes
 
 class ProductCreate(ProductBase):
     pass
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
-    description: Optional[str] = None
     price: Optional[float] = None
     category_id: Optional[int] = None
     brand: Optional[str] = None
     stock_quantity: Optional[int] = None
     attributes: Optional[Dict[str, Any]] = None
 
+class ProductSummary(BaseModel):
+    id: int
+    name: str
+    price: float
+    brand: Optional[str] = None
+    stock_quantity: int
+    category_name: str
+    rating: Optional[float] = None
+    
+    class Config:
+        from_attributes = True
+        
 class Product(ProductBase):
     id: int
     created_at: datetime
@@ -64,16 +85,14 @@ class Product(ProductBase):
     class Config:
         from_attributes = True
 
-# Response Schemas
+# =================== Response Schemas ===================
+
 class ProductListResponse(BaseModel):
     total: int
     page: int
     per_page: int
-    products: List[Product]
-
-class CategoryListResponse(BaseModel):
-    total: int
-    categories: List[Category]
+    total_pages: int
+    products: List[ProductSummary]
 
 # Update forward references
 Category.model_rebuild()
