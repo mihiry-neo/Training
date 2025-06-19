@@ -18,5 +18,12 @@ def main():
     execute_from_command_line(sys.argv)
 
 
+
 if __name__ == '__main__':
     main()
+
+
+# category based product
+# real time 
+# sql based
+# faker, baker, mimesis
