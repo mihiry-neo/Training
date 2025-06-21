@@ -142,3 +142,33 @@ def update_product(
     updated_product = crud.update_product(db, product.id, product_update)  # use actual ID
 
     return updated_product
+
+@router.get("/{product_id}/inventory", response_model=schemas.Inventory)
+def get_product_inventory(product_id: int, db: Session = Depends(get_db)):
+    inventory = crud.get_inventory_by_product_id(db, product_id)
+    if not inventory:
+        raise HTTPException(status_code=404, detail="Inventory not found")
+    return inventory
+
+@router.patch("/{product_id}/inventory")
+def adjust_inventory(
+    product_id: int,
+    quantity_delta: int,
+    reason: str = "manual adjustment",
+    order_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        updated_inventory = crud.update_inventory_quantity(
+            db, product_id, quantity_delta, reason, order_id
+        )
+        return {
+            "message": f"Inventory updated for Product ID {product_id}",
+            "new_quantity": updated_inventory.quantity_available
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/{product_id}/stock-movements", response_model=List[schemas.StockMovement])
+def get_stock_movements(product_id: int, db: Session = Depends(get_db)):
+    return crud.get_stock_movements_for_product(db, product_id)

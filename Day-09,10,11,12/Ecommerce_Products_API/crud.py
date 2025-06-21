@@ -151,3 +151,40 @@ def update_product(db: Session, product_id: int, product_update: schemas.Product
         # Rollback in case of any database errors
         db.rollback()
         raise e
+    
+    def get_inventory_by_product_id(db: Session, product_id: int):
+        return db.query(models.Inventory).filter(models.Inventory.product_id == product_id).first()
+
+    def update_inventory_quantity(db: Session, product_id: int, quantity_delta: int, reason: str = None, order_id: int = None):
+        inventory = get_inventory_by_product_id(db, product_id)
+        if not inventory:
+            raise Exception("Inventory record not found for product_id")
+
+        inventory.quantity_available += quantity_delta
+        inventory.quantity_available = max(0, inventory.quantity_available)
+
+        movement = models.StockMovement(
+            product_id=product_id,
+            order_id=order_id,
+            change=quantity_delta,
+            reason=reason
+        )
+        db.add(movement)
+        db.commit()
+        db.refresh(inventory)
+        return inventory
+
+    def create_or_update_inventory(db: Session, product_id: int, data: schemas.InventoryBase):
+        inventory = get_inventory_by_product_id(db, product_id)
+        if not inventory:
+            inventory = models.Inventory(product_id=product_id, **data.model_dump())
+            db.add(inventory)
+        else:
+            for key, value in data.model_dump().items():
+                setattr(inventory, key, value)
+        db.commit()
+        db.refresh(inventory)
+        return inventory
+
+    def get_stock_movements_for_product(db: Session, product_id: int):
+        return db.query(models.StockMovement).filter(models.StockMovement.product_id == product_id).order_by(models.StockMovement.timestamp.desc()).all()

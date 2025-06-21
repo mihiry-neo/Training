@@ -109,6 +109,22 @@ class DataGenerator:
 
                 product = Product(**product_data)
                 db.add(product)
+                db.flush()  # Ensure product.id is available for Inventory
+
+                # ✅ Create Inventory for this product
+                from models import Inventory
+                inventory = Inventory(
+                    product_id=product.id,
+                    quantity_available=product_data["stock_quantity"],
+                    quantity_reserve=0,
+                    reorder_level=10,
+                    reorder_quantity=20,
+                    unit_cost=round(product_data["price"] * 0.5, 2),
+                    batch_number=self.faker.uuid4(),
+                    location=self.faker.city()
+                )
+                db.add(inventory)
+
                 products.append(product)
 
             db.commit()
@@ -117,6 +133,7 @@ class DataGenerator:
             db.rollback()
             log.error(f"Failed to create products: {e}")
         return products
+
 
     def randomly_update_prices(self, db: Session, products: List[Product], batch_size: int = 50, reason: str = "auto_scheduler") -> None:
         log.info("Starting batch price update...")

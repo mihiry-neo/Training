@@ -112,3 +112,43 @@ class ProductListResponse(BaseModel):
     per_page: int
     total_pages: int
     products: List[ProductSummary]
+
+# =========================================================
+# 🧮 INVENTORY SCHEMAS
+# =========================================================
+
+class InventoryBase(BaseModel):
+    quantity_available: int = 0
+    quantity_reserve: int = 0
+    reorder_level: Optional[int] = 10
+    reorder_quantity: Optional[int] = 20
+    unit_cost: Optional[float] = None
+    last_restocked: Optional[datetime] = None
+    expiry_date: Optional[datetime] = None
+    batch_number: Optional[str] = None
+    location: Optional[str] = None
+
+class Inventory(InventoryBase):
+    id: int
+    product_id: int
+    last_updated: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# =========================================================
+# 🔁 STOCK MOVEMENT SCHEMAS
+# =========================================================
+
+class StockMovementBase(BaseModel):
+    product_id: int
+    order_id: Optional[int] = None
+    change: int
+    reason: Optional[str] = None
+
+class StockMovement(StockMovementBase):
+    id: int
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True

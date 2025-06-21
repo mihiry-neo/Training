@@ -1,0 +1,769 @@
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\crud.py ---
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func, desc, asc
+from sqlalchemy.orm import joinedload
+from typing import Tuple, Dict, Any, Optional, List
+import models, schemas
+from logger import log
+
+def create_product_manual(db: Session, product: schemas.ProductCreate):
+    try:
+        db_product = models.Product(**product.model_dump())
+        db.add(db_product)
+        db.commit()
+        db.refresh(db_product)
+        log.info(f"Product created manually: ID={db_product.id}, Name={db_product.name}")
+        return db_product
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to create product: {e}")
+        raise
+
+def get_all_products(db: Session):
+    products = db.query(models.Product).all()
+    log.info(f"Retrieved {len(products)} products")
+    return products
+
+def get_product_by_id(db: Session, id: int):
+    product = db.query(models.Product).filter(models.Product.id == id).first()
+    if product:
+        log.info(f"Found product by ID={id}: {product.name}")
+    else:
+        log.warning(f"No product found with ID={id}")
+    return product
+
+def get_product_by_name(db: Session, name: str):
+    return db.query(models.Product).filter(models.Product.name == name).first()
+
+def get_product_by_brand(db: Session, brand: str):
+    return db.query(models.Product).filter(models.Product.brand == brand).first()
+
+def get_products_by_category(db: Session, category_id: int):
+    products = db.query(models.Product).filter(models.Product.category_id == category_id).all()
+    log.info(f"Found {len(products)} products for Category ID={category_id}")
+    return products
+
+def get_all_categories(db: Session):
+    categories = db.query(models.Category).all()
+    log.info(f"Retrieved {len(categories)} categories")
+    return categories
+
+def get_paginated_products(
+    db: Session, 
+    skip: int, 
+    limit: int, 
+    search: Optional[str] = None,
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
+    filters: Optional[Dict[str, Any]] = None
+) -> Tuple[int, List[models.Product]]:
+    try:
+        log.info(f"Fetching paginated products | Skip={skip}, Limit={limit}, Search={search}, Sort={sort_by} {sort_dir}, Filters={filters}")
+        query = db.query(models.Product).options(joinedload(models.Product.category))
+        
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    models.Product.name.like(search_term),
+                    models.Product.brand.like(search_term)
+                )
+            )
+        
+        if filters:
+            if filters.get('min_price'):
+                query = query.filter(models.Product.price >= filters['min_price'])
+            if filters.get('max_price'):
+                query = query.filter(models.Product.price <= filters['max_price'])
+            if filters.get('category_id'):
+                query = query.filter(models.Product.category_id == filters['category_id'])
+            if filters.get('in_stock_only'):
+                query = query.filter(models.Product.stock_quantity > 0)
+
+        total = query.count()
+
+        if hasattr(models.Product, sort_by):
+            sort_column = getattr(models.Product, sort_by)
+            if sort_dir == "desc":
+                query = query.order_by(desc(sort_column))
+            else:
+                query = query.order_by(asc(sort_column))
+        else:
+            log.warning(f"Invalid sort_by column '{sort_by}'")
+
+        products = query.offset(skip).limit(limit).all()
+        log.info(f"Returning {len(products)} products out of total {total}")
+        return total, products
+    
+    except Exception as e:
+        log.error(f"Error in get_paginated_products: {e}")
+        raise
+
+def update_product(db: Session, product_id: int, product_update: schemas.ProductUpdate):
+    """Update a product with only the provided fields"""
+    
+    # Get the existing product - try by ID first, then by name, then by brand
+    db_product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    
+    if not db_product:
+        # Try by name
+        db_product = db.query(models.Product).filter(models.Product.name == str(product_id)).first()
+    
+    if not db_product:
+        # Try by brand
+        db_product = db.query(models.Product).filter(models.Product.brand == str(product_id)).first()
+    
+    if not db_product:
+        return None
+    
+    # Get only the fields that were actually provided (not None)
+    update_data = product_update.model_dump(exclude_unset=True)
+    
+    # Handle attributes separately for merging
+    if 'attributes' in update_data:
+        new_attributes = update_data.pop('attributes')
+        
+        if new_attributes is not None:
+            # Initialize existing attributes as empty dict if None
+            existing_attributes = db_product.attributes or {}
+            
+            if isinstance(new_attributes, dict) and new_attributes:
+                # Merge with existing attributes instead of replacing
+                merged_attributes = dict(existing_attributes)
+                merged_attributes.update(new_attributes)
+                db_product.attributes = merged_attributes
+            elif new_attributes == {}:
+                # If explicitly setting to empty dict, replace entirely
+                db_product.attributes = {}
+            # If new_attributes is empty dict or falsy, keep existing
+        # If new_attributes is None, keep existing attributes unchanged
+    
+    # Update other fields
+    for field, value in update_data.items():
+        if hasattr(db_product, field):
+            setattr(db_product, field, value)
+    
+    try:
+        # Save changes
+        db.commit()
+        db.refresh(db_product)
+        return db_product
+    except Exception as e:
+        # Rollback in case of any database errors
+        db.rollback()
+        raise e
+
+
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\database.py ---
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+import os
+from dotenv import load_dotenv
+from logger import log
+
+load_dotenv()
+
+DB_URL = f"mysql+pymysql://{os.getenv('DB_User')}:{os.getenv('DB_Password')}@{os.getenv('DB_Host')}:{os.getenv('DB_Port')}/{os.getenv('DB_Name')}"
+
+try:
+    engine = create_engine(DB_URL)
+    log.info("Database engine created successfully")
+except Exception as e:
+    log.error(f"Failed to create database engine: {e}")
+    raise
+
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    log.debug("Database session started")
+    try:
+        yield db
+    finally:
+        db.close()
+        log.debug("Database session closed")
+
+
+
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\data_generator.py ---
+import random
+from typing import List, Dict, Any
+from faker import Faker
+from sqlalchemy.orm import Session
+from models import Product, Category, PriceHistory
+from logger import log
+
+class DataGenerator:
+    def __init__(self):
+        self.faker = Faker()
+        self.global_categories = [
+            "Fashion", "Electronics", "Home & Garden", "Food & Beverage",
+            "Health & Beauty", "Books & Media", "Toys & Games",
+            "Sports & Outdoors", "DIY & Hardware", "Furniture"
+        ]
+        self.category_subcategories = {
+            "Fashion": ["Clothing", "Footwear", "Accessories"],
+            "Electronics": ["Mobiles", "Laptops", "Appliances"],
+            "Home & Garden": ["Decor", "Plants", "Kitchen"],
+            "Food & Beverage": ["Snacks", "Drinks", "Groceries"],
+            "Health & Beauty": ["Skincare", "Supplements", "Makeup"],
+            "Books & Media": ["Books", "Magazines", "E-books"],
+            "Toys & Games": ["Board Games", "Action Figures", "Educational"],
+            "Sports & Outdoors": ["Fitness", "Cycling", "Camping"],
+            "DIY & Hardware": ["Tools", "Paint", "Electrical"],
+            "Furniture": ["Bedroom", "Office", "Living Room"]
+        }
+        self.brand_names = [
+            "Astra", "Zenex", "Nova", "UrbanMode", "GearPro",
+            "CraftHaus", "NextEra", "Skyline", "PureEssence", "Flytek"
+        ]
+
+    def create_categories(self, db: Session) -> List[Category]:
+        log.info("Creating initial categories and subcategories...")
+        categories = []
+        try:
+            for main_name in self.global_categories:
+                main_cat = Category(name=main_name)
+                db.add(main_cat)
+                db.flush()
+                categories.append(main_cat)
+
+                sub_names = self.category_subcategories.get(main_name, [])
+                for sub in sub_names:
+                    sub_cat = Category(name=f"{main_name} - {sub}", parent_id=main_cat.id)
+                    db.add(sub_cat)
+                    db.flush()
+                    categories.append(sub_cat)
+            db.commit()
+            log.info(f"Created {len(categories)} categories (including subcategories).")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Error while creating categories: {e}")
+        return categories
+
+    def generate_brand(self) -> str:
+        return random.choice([
+            random.choice(self.brand_names),
+            f"{self.faker.last_name()} {random.choice(['Inc', 'Corp', 'Ltd', 'Group'])}",
+            f"{self.faker.country_code()} Tech",
+            f"{self.faker.word().capitalize()}Works"
+        ])
+
+    def generate_product_attributes(self, category_name: str) -> Dict[str, Any]:
+        return {
+            "color": self.faker.color_name(),
+            "weight": (
+                f"{random.uniform(0.2, 3.0):.2f} kg"
+                if "Electronics" in category_name or "Toys" in category_name
+                else f"{random.uniform(5.0, 50.0):.2f} kg"
+                if "Furniture" in category_name
+                else f"{random.uniform(0.5, 10.0):.2f} kg"
+            ),
+            "material": (
+                random.choice(["Cotton", "Polyester", "Denim", "Wool", "Silk"])
+                if "Fashion" in category_name
+                else random.choice(["Wood", "Metal", "Glass", "Plastic", "Leather"])
+                if "Furniture" in category_name
+                else random.choice(["Plastic", "Aluminum", "Glass"])
+            ),
+            "rating": round(random.uniform(3.0, 5.0), 1)
+        }
+
+    def create_products(self, db: Session, categories: List[Category], count: int) -> List[Product]:
+        log.info(f"Generating {count} product(s)...")
+        products = []
+        try:
+            for _ in range(count):
+                if not categories:
+                    raise ValueError("No categories available. Please create categories first.")
+                category = random.choice(categories)
+
+                # Inlined generate_product logic
+                product_data = {
+                    "name": f"{self.faker.word().capitalize()} {self.faker.word().capitalize()}",
+                    "price": round(
+                        random.uniform(200.0, 2000.0)
+                        if "Electronics" in category.name or "Furniture" in category.name
+                        else random.uniform(50.0, 500.0)
+                        if "Fashion" in category.name
+                        else random.uniform(10.0, 300.0),
+                        2
+                    ),
+                    "category_id": category.id,
+                    "brand": self.generate_brand(),
+                    "stock_quantity": random.randint(0, 1000),
+                    "attributes": self.generate_product_attributes(category.name)
+                }
+
+                product = Product(**product_data)
+                db.add(product)
+                products.append(product)
+
+            db.commit()
+            log.info(f"Successfully created {len(products)} products.")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Failed to create products: {e}")
+        return products
+
+    def randomly_update_prices(self, db: Session, products: List[Product], batch_size: int = 50, reason: str = "auto_scheduler") -> None:
+        log.info("Starting batch price update...")
+        try:
+            selected = random.sample(products, min(batch_size, len(products)))
+            for product in selected:
+                old_price = product.price
+                change_percent = random.uniform(-0.2, 0.2)
+                new_price = round(old_price * (1 + change_percent), 2)
+                new_price = max(new_price, 1.0)
+
+                price_history = PriceHistory(
+                    product_id=product.id,
+                    old_price=old_price,
+                    new_price=new_price,
+                    reason=reason
+                )
+
+                product.price = new_price
+                db.add(price_history)
+
+            db.commit()
+            log.info(f"Updated prices for {len(selected)} product(s).")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Batch price update failed: {e}")
+
+    def randomly_update_stocks(self, db: Session, products: List[Product], batch_size: int = 50) -> None:
+        log.info("Starting batch stock update...")
+        try:
+            selected = random.sample(products, min(batch_size, len(products)))
+            for product in selected:
+                change = random.randint(-50, 100)
+                product.stock_quantity = max(0, product.stock_quantity + change)
+
+            db.commit()
+            log.info(f"Updated stock for {len(selected)} product(s).")
+        except Exception as e:
+            db.rollback()
+            log.error(f"Batch stock update failed: {e}")
+
+    def get_categories(self, db: Session) -> List[Category]:
+        categories = db.query(Category).all()
+        log.info(f"Retrieved {len(categories)} categories from database.")
+        return categories
+
+
+
+
+#
+
+
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\logger.py ---
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("app.log", mode='a', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+log = logging.getLogger(__name__)
+
+
+
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\main.py ---
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from apscheduler.schedulers.background import BackgroundScheduler
+from database import engine, Base, SessionLocal
+from crud import get_all_products
+from routers import product_router
+from data_generator import DataGenerator
+import os
+from dotenv import load_dotenv
+from logger import log
+import random
+
+load_dotenv()
+
+# Initialize scheduler and generator
+scheduler = BackgroundScheduler()
+generator = DataGenerator()
+
+def scheduled_generate_product():
+    db = SessionLocal()
+    try:
+        categories = generator.get_categories(db)
+        if categories:
+            count = random.randint(10, 100)
+            log.info(f"Generating {count} new products...")
+            generator.create_products(db, categories, count=count)
+    except Exception as e:
+        log.error(f"Error in scheduled_generate_product: {e}")
+    finally:
+        db.close()
+
+def scheduled_price_update():
+    db = SessionLocal()
+    try:
+        products = get_all_products(db)
+        if products:
+            log.info("Updating product prices...")
+            generator.randomly_update_prices(db, products)
+    except Exception as e:
+        log.error(f"Error in scheduled_price_update: {e}")
+    finally:
+        db.close()
+
+def scheduled_stock_update():
+    db = SessionLocal()
+    try:
+        products = get_all_products(db)
+        if products:
+            log.info("Updating product stock quantities...")
+            generator.randomly_update_stocks(db, products)
+    except Exception as e:
+        log.error(f"Error in scheduled_stock_update: {e}")
+    finally:
+        db.close()
+
+ENABLE_SCHEDULER = os.getenv("ENABLE_SCHEDULER", "false").lower() == "true"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info("Starting up...")
+    
+    try:
+        Base.metadata.create_all(bind=engine)
+        log.info("Database tables created or already exist.")
+    except Exception as e:
+        log.error(f"Error creating tables: {e}")
+
+    db = SessionLocal()
+    try:
+        categories = generator.get_categories(db)
+        if not categories:
+            log.info("No categories found, creating initial categories...")
+            generator.create_categories(db)
+        else:
+            log.info(f"Found {len(categories)} existing categories.")
+    except Exception as e:
+        log.error(f"Error initializing categories: {e}")
+    finally:
+        db.close()
+
+    if ENABLE_SCHEDULER:
+        log.info("Scheduler is enabled.")
+        scheduler.add_job(scheduled_generate_product, "interval", seconds=60, id="generate_product")
+        scheduler.add_job(scheduled_price_update, "interval", seconds=60, id="price_update")
+        scheduler.add_job(scheduled_stock_update, "interval", seconds=90, id="stock_update")
+        scheduler.start()
+        log.info("Scheduler jobs started.")
+    else:
+        log.warning("Scheduler disabled — products will only generate manually")
+
+    yield
+
+    log.info("Shutting down...")
+    if ENABLE_SCHEDULER and scheduler.running:
+        scheduler.shutdown(wait=False)
+        log.info("Scheduler shutdown complete.")
+    else:
+        log.info("Scheduler was not running — no shutdown needed.")
+
+
+# Create FastAPI app
+app = FastAPI(
+    title="E-commerce Product API", 
+    version="1.0",
+    lifespan=lifespan
+)
+
+# Include routers
+app.include_router(product_router.router)
+
+@app.get("/")
+def root():
+    log.info("Root endpoint accessed.")
+    return {"message": "Product API is running"}
+
+@app.get("/health")
+def health_check():
+    log.info("Health check endpoint accessed.")
+    return {
+        "status": "healthy",
+        "scheduler_running": scheduler.running,
+        "jobs": [job.id for job in scheduler.get_jobs()]
+    }
+
+
+
+
+
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\schemas.py ---
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+
+# =========================================================
+# 🗂️ CATEGORY SCHEMAS
+# =========================================================
+
+class CategoryBase(BaseModel):
+    name: str
+    parent_id: Optional[int] = None
+
+class Category(CategoryBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    children: List['Category'] = []
+
+    class Config:
+        from_attributes = True
+
+# Update forward reference
+Category.model_rebuild()
+
+# =========================================================
+# 💰 PRICE HISTORY SCHEMAS
+# =========================================================
+
+class ProductPriceHistoryBase(BaseModel):
+    old_price: float
+    new_price: float
+    reason: Optional[str] = None
+
+class ProductPriceHistory(ProductPriceHistoryBase):
+    id: int
+    product_id: int
+    changed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# =========================================================
+# 📦 PRODUCT SCHEMAS
+# =========================================================
+
+# ---------- Input / Base Models ----------
+
+class ProductBase(BaseModel):
+    name: str
+    price: float
+    category_id: int
+    brand: Optional[str] = None
+    stock_quantity: int = 0
+    attributes: Optional[Dict[str, Any]] = None
+
+class ProductCreate(ProductBase):
+    pass
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    price: Optional[float] = Field(None, gt=0, description="Price must be positive")
+    category_id: Optional[int] = Field(None, gt=0, description="Category ID must be positive")
+    brand: Optional[str] = Field(None, max_length=100)
+    stock_quantity: Optional[int] = Field(None, ge=0, description="Stock cannot be negative")
+    attributes: Optional[Dict[str, Any]] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError('Name cannot be empty or just whitespace')
+        return v.strip() if v else v
+
+    @field_validator('brand')
+    @classmethod
+    def validate_brand(cls, v):
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError('Brand cannot be empty or just whitespace')
+        return v.strip() if v else v
+
+# ---------- Output / Full Models ----------
+
+class ProductSummary(BaseModel):
+    id: int
+    name: str
+    price: float
+    brand: Optional[str] = None
+    stock_quantity: int
+    category_name: str
+    rating: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class Product(ProductBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    category: Category
+    price_history: List[ProductPriceHistory] = []
+
+    class Config:
+        from_attributes = True
+
+# =========================================================
+# 📋 PAGINATED RESPONSE SCHEMAS
+# =========================================================
+
+class ProductListResponse(BaseModel):
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+    products: List[ProductSummary]
+
+
+
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\routers\product_router.py ---
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import List, Optional
+import schemas, crud
+from database import get_db
+from data_generator import DataGenerator
+from logger import log
+
+router = APIRouter(prefix="/products", tags=["Products"])
+generator = DataGenerator()
+
+@router.post("/", response_model=schemas.Product)
+def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
+    log.info(f"Creating product: {product.name}")
+    return crud.create_product_manual(db, product)
+
+@router.get("/", response_model=schemas.ProductListResponse)
+def get_all_products(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search products"),
+    sort_by: str = Query("created_at", description="Sort by field"),
+    sort_dir: str = Query("desc", regex="^(asc|desc)$", description="Sort direction"),
+    min_price: Optional[float] = Query(None, ge=0, description="Minimum price"),
+    max_price: Optional[float] = Query(None, ge=0, description="Maximum price"),
+    category_id: Optional[int] = Query(None, description="Filter by category"),
+    in_stock_only: bool = Query(False, description="Show only in-stock items")
+):
+    log.info(f"Fetching products | page={page}, per_page={per_page}, search='{search}', sort_by='{sort_by}', sort_dir='{sort_dir}'")
+    
+    skip = (page - 1) * per_page
+    filters = {
+        'min_price': min_price,
+        'max_price': max_price,
+        'category_id': category_id,
+        'in_stock_only': in_stock_only
+    }
+    
+    total, products = crud.get_paginated_products(
+        db, skip, per_page, search, sort_by, sort_dir, filters
+    )
+    
+    clean_products = []
+    for product in products:
+        rating = None
+        if product.attributes and 'rating' in product.attributes:
+            rating = product.attributes['rating']
+        
+        clean_products.append({
+            "id": product.id,
+            "name": product.name,
+            "price": product.price,
+            "brand": product.brand,
+            "stock_quantity": product.stock_quantity,
+            "category_name": product.category.name if product.category else "Unknown",
+            "rating": rating
+        })
+    
+    total_pages = (total + per_page - 1) // per_page
+    log.info(f"Found {len(products)} products (Total: {total}, Total Pages: {total_pages})")
+    
+    return {
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "products": clean_products
+    }
+
+@router.get("/{product_id}", response_model=schemas.Product)
+def get_product_by_id(product_id: int, db: Session = Depends(get_db)):
+    log.info(f"Fetching product by ID: {product_id}")
+    product = crud.get_product_by_id(db, product_id)
+    if not product:
+        log.warning(f"Product not found: ID {product_id}")
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+@router.post("/auto-generate", response_model=List[schemas.Product])
+def auto_generate_products(count: int = 1, db: Session = Depends(get_db)):
+    log.info(f"Auto-generating {count} products")
+    categories = crud.get_all_categories(db)
+    return generator.create_products(db, categories, count)
+
+from fastapi import Query
+
+@router.post("/update-prices")
+def update_all_prices(
+    count: int = Query(50, ge=1, le=500, description="Number of products to update"),
+    db: Session = Depends(get_db)
+):
+    log.info(f"Updating prices for {count} product(s)")
+    products = crud.get_all_products(db)
+    if not products:
+        log.warning("No products found to update prices")
+        return {"message": "No products found to update"}
+    generator.randomly_update_prices(db, products, batch_size=count)
+    return {"message": f"Price updated for {min(count, len(products))} products"}
+
+
+@router.post("/update-stock")
+def update_all_stocks(
+    count: int = Query(50, ge=1, le=500, description="Number of products to update"),
+    db: Session = Depends(get_db)
+):
+    log.info(f"Updating stock for {count} product(s)")
+    products = crud.get_all_products(db)
+    if not products:
+        log.warning("No products found to update stock")
+        return {"message": "No products found to update"}
+    generator.randomly_update_stocks(db, products, batch_size=count)
+    return {"message": f"Stock updated for {min(count, len(products))} products"}
+
+
+# Add this endpoint to your routers/product_router.py file
+
+@router.patch("/{product_id}", response_model=schemas.Product)
+def update_product(
+    product_id: str,  # Accept string so name/brand are allowed
+    product_update: schemas.ProductUpdate,
+    db: Session = Depends(get_db)
+):
+    # Try resolving product by ID, name, or brand
+    product = None
+    if product_id.isdigit():
+        product = crud.get_product_by_id(db, int(product_id))
+    if not product:
+        product = crud.get_product_by_name(db, product_id)
+    if not product:
+        product = crud.get_product_by_brand(db, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Validate category exists if updating category
+    if product_update.category_id is not None:
+        valid_category_ids = [cat.id for cat in crud.get_all_categories(db)]
+        if product_update.category_id not in valid_category_ids:
+            raise HTTPException(status_code=400, detail="Invalid category_id")
+
+    # Perform update
+    updated_product = crud.update_product(db, product.id, product_update)  # use actual ID
+
+    return updated_product
+

@@ -8,6 +8,7 @@ from data_generator import DataGenerator
 import os
 from dotenv import load_dotenv
 from logger import log
+import models
 import random
 
 load_dotenv()
@@ -52,6 +53,8 @@ def scheduled_stock_update():
         log.error(f"Error in scheduled_stock_update: {e}")
     finally:
         db.close()
+
+print("Tables found:", Base.metadata.tables.keys())
 
 ENABLE_SCHEDULER = os.getenv("ENABLE_SCHEDULER", "false").lower() == "true"
 
