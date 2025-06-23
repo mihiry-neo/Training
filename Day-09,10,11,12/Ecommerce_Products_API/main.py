@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -83,7 +84,7 @@ async def lifespan(app: FastAPI):
 
     if ENABLE_SCHEDULER:
         log.info("Scheduler is enabled.")
-        scheduler.add_job(scheduled_generate_product, "interval", seconds=60, id="generate_product")
+        scheduler.add_job(scheduled_generate_product, "interval", seconds=30, id="generate_product")
         scheduler.add_job(scheduled_price_update, "interval", seconds=60, id="price_update")
         scheduler.add_job(scheduled_stock_update, "interval", seconds=90, id="stock_update")
         scheduler.start()
@@ -91,14 +92,17 @@ async def lifespan(app: FastAPI):
     else:
         log.warning("Scheduler disabled — products will only generate manually")
 
-    yield
+    try:
+        yield
+    except asyncio.CancelledError:
+        log.warning("Lifespan cancelled (probably due to shutdown)")
+        raise
+    finally:
+        log.info("Shutting down...")
+        if ENABLE_SCHEDULER and scheduler.running:
+            scheduler.shutdown(wait=False)
+            log.info("Scheduler shutdown complete.")
 
-    log.info("Shutting down...")
-    if ENABLE_SCHEDULER and scheduler.running:
-        scheduler.shutdown(wait=False)
-        log.info("Scheduler shutdown complete.")
-    else:
-        log.info("Scheduler was not running — no shutdown needed.")
 
 
 # Create FastAPI app

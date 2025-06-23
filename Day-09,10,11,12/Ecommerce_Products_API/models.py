@@ -28,7 +28,6 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, index=True)
     price = Column(Numeric(10, 2), nullable=False, index=True)
-    stock_quantity = Column(Integer, default=0)
     brand = Column(String(100), index=True)
     attributes = Column(JSON, nullable=True)
     category_id = Column(Integer, ForeignKey('categories.id'))
@@ -53,7 +52,6 @@ class PriceHistory(Base):
 
     product = relationship("Product", back_populates="price_history")
 
-
 class Inventory(Base):
     __tablename__ = "inventory"
 
@@ -77,9 +75,11 @@ class StockMovement(Base):
     __tablename__ = "stock_movements"
 
     id = Column(Integer, primary_key=True, index=True)
+    # order_id = Column(Integer, nullable=True)  # Simple approach
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     change = Column(Integer, nullable=False)
     reason = Column(String(255), nullable=True)
     timestamp = Column(DateTime, default=utc_now)
 
     product = relationship("Product", back_populates="stock_movements")
+    # order_id: Optional[int] = None

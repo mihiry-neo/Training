@@ -152,6 +152,83 @@ def update_product(db: Session, product_id: int, product_update: schemas.Product
         # Rollback in case of any database errors
         db.rollback()
         raise e
+    
+def get_inventory_by_product_id(db: Session, product_id: int):
+    return db.query(models.Inventory).filter(models.Inventory.product_id == product_id).first()
+
+def update_inventory_quantity(db: Session, product_id: int, quantity_delta: int, reason: str = None, order_id: int = None):
+    inventory = get_inventory_by_product_id(db, product_id)
+    if not inventory:
+        raise Exception("Inventory record not found for product_id")
+
+    inventory.quantity_available += quantity_delta
+    inventory.quantity_available = max(0, inventory.quantity_available)
+
+    movement = models.StockMovement(
+        product_id=product_id,
+        order_id=order_id,
+        change=quantity_delta,
+        reason=reason
+        )
+    db.add(movement)
+    db.commit()
+    db.refresh(inventory)
+    return inventory
+
+def create_or_update_inventory(db: Session, product_id: int, data: schemas.InventoryBase):
+    inventory = get_inventory_by_product_id(db, product_id)
+    if not inventory:
+        inventory = models.Inventory(product_id=product_id, **data.model_dump())
+        db.add(inventory)
+    else:
+        for key, value in data.model_dump().items():
+            setattr(inventory, key, value)
+    db.commit()
+    db.refresh(inventory)
+    return inventory
+
+def get_stock_movements_for_product(db: Session, product_id: int):
+    return db.query(models.StockMovement).filter(models.StockMovement.product_id == product_id).order_by(models.StockMovement.timestamp.desc()).all()
+
+
+def update_inventory_settings(
+    db: Session,
+    product_id: int,
+    update_data: schemas.InventoryUpdate
+):
+    inventory = db.query(models.Inventory).filter(models.Inventory.product_id == product_id).first()
+    if not inventory:
+        raise Exception("Inventory not found")
+
+    for key, value in update_data.model_dump(exclude_unset=True).items():
+        setattr(inventory, key, value)
+
+    db.commit()
+    db.refresh(inventory)
+    return inventory
+
+# In crud.py - add proper stock management functions
+def reserve_stock(db: Session, product_id: int, quantity: int) -> bool:
+    """Reserve stock with proper transaction management"""
+    try:
+        inventory = get_inventory_by_product_id(db, product_id)
+        if not inventory or inventory.quantity_available < quantity:
+            return False
+            
+        inventory.quantity_available -= quantity
+        inventory.quantity_reserve += quantity
+        
+        movement = models.StockMovement(
+            product_id=product_id,
+            change=-quantity,
+            reason="reserved"
+        )
+        db.add(movement)
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        raise e
 
 
 # --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\database.py ---
@@ -273,11 +350,19 @@ class DataGenerator:
     def create_products(self, db: Session, categories: List[Category], count: int) -> List[Product]:
         log.info(f"Generating {count} product(s)...")
         products = []
+        
+        # Map categories that require expiry dates
+        categories_with_expiry = {
+            "Food & Beverage", "Health & Beauty"
+        }
+        
         try:
             for _ in range(count):
                 if not categories:
                     raise ValueError("No categories available. Please create categories first.")
                 category = random.choice(categories)
+
+                stock_quantity = random.randint(0, 1000)
 
                 # Inlined generate_product logic
                 product_data = {
@@ -292,20 +377,47 @@ class DataGenerator:
                     ),
                     "category_id": category.id,
                     "brand": self.generate_brand(),
-                    "stock_quantity": random.randint(0, 1000),
                     "attributes": self.generate_product_attributes(category.name)
                 }
 
                 product = Product(**product_data)
                 db.add(product)
+                db.flush()  # Ensure product.id is available for Inventory
+
+                # ✅ Create complete Inventory for this product
+                from models import Inventory
+                from datetime import datetime, timedelta
+                
+                # Determine expiry date based on category
+                if category.name in categories_with_expiry:
+                    expiry_date = datetime.now() + timedelta(days=random.randint(30, 365))
+                else:
+                    expiry_date = datetime(9999, 12, 31)  # Sentinel for "no expiry"
+                
+                inventory = Inventory(
+                    product_id=product.id,
+                    quantity_available=stock_quantity,
+                    quantity_reserve=random.randint(0, min(50, stock_quantity // 4)),  # Reserve some stock
+                    reorder_level=random.randint(5, 25),  # Random reorder level
+                    reorder_quantity=random.randint(20, 100),  # Random reorder quantity
+                    unit_cost=round(product_data["price"] * random.uniform(0.4, 0.7), 2),  # Cost is 40-70% of selling price
+                    last_restocked=datetime.now() - timedelta(days=random.randint(1, 30)),  # Recently restocked
+                    expiry_date=expiry_date,
+                    batch_number=self.faker.uuid4(),
+                    location=self.faker.city()
+                    # last_updated will be set automatically by the model's default
+                )
+                db.add(inventory)
+
                 products.append(product)
 
             db.commit()
-            log.info(f"Successfully created {len(products)} products.")
+            log.info(f"Successfully created {len(products)} products with complete inventory records.")
         except Exception as e:
             db.rollback()
             log.error(f"Failed to create products: {e}")
         return products
+
 
     def randomly_update_prices(self, db: Session, products: List[Product], batch_size: int = 50, reason: str = "auto_scheduler") -> None:
         log.info("Starting batch price update...")
@@ -334,15 +446,58 @@ class DataGenerator:
             log.error(f"Batch price update failed: {e}")
 
     def randomly_update_stocks(self, db: Session, products: List[Product], batch_size: int = 50) -> None:
-        log.info("Starting batch stock update...")
+        log.info("Starting batch stock update with inventory management...")
         try:
+            from models import Inventory
+            from datetime import datetime
+            
             selected = random.sample(products, min(batch_size, len(products)))
+            restocked_count = 0
+            updated_count = 0
+            
             for product in selected:
-                change = random.randint(-50, 100)
-                product.stock_quantity = max(0, product.stock_quantity + change)
+                # Get the inventory record for this product
+                inventory = db.query(Inventory).filter(Inventory.product_id == product.id).first()
+                
+                if not inventory:
+                    log.warning(f"No inventory record found for product {product.id}")
+                    continue
+                
+                # Simulate stock changes with realistic business scenarios
+                scenario = random.choices(
+                    ["normal_sales", "heavy_sales", "slow_sales", "restock"],
+                    weights=[60, 25, 10, 5]  # 60% normal, 25% heavy sales, 10% slow, 5% restock
+                )[0]
+                
+                if scenario == "heavy_sales":
+                    change = random.randint(-100, -30)  # Big sales day
+                elif scenario == "normal_sales":
+                    change = random.randint(-30, -5)   # Regular sales
+                elif scenario == "slow_sales":
+                    change = random.randint(-10, 0)    # Slow day
+                else:  # restock
+                    change = random.randint(20, 100)   # Manual restock
+                old_quantity = inventory.quantity_available
+                new_quantity = max(0, inventory.quantity_available + change)
+                
+                # Update inventory and product
+                inventory.quantity_available = new_quantity
+                product.stock_quantity = new_quantity
+                
+                # Auto-restock if below reorder level (but not always - 20% chance)
+                if new_quantity <= inventory.reorder_level and old_quantity > inventory.reorder_level:
+                    if random.random() < 0.2:  # Only 20% chance of auto-restock (was 30%)
+                        inventory.quantity_available += inventory.reorder_quantity
+                        product.stock_quantity += inventory.reorder_quantity
+                        inventory.last_restocked = datetime.now()
+                        inventory.batch_number = self.faker.uuid4()
+                        restocked_count += 1
+                
+                updated_count += 1
 
             db.commit()
-            log.info(f"Updated stock for {len(selected)} product(s).")
+            log.info(f"Updated stock for {updated_count} product(s). Auto-restocked {restocked_count} product(s).")
+            
         except Exception as e:
             db.rollback()
             log.error(f"Batch stock update failed: {e}")
@@ -355,7 +510,40 @@ class DataGenerator:
 
 
 
-#
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\extract.py ---
+import os
+
+# Change this to the directory you want to scan
+ROOT_DIR = "C:\\Users\\user\\Documents\\GitHub\\Training\\Day-09,10,11,12\\Ecommerce_Products_API"
+
+# Output file name
+OUTPUT_FILE = "all_python_code.txt"
+
+# Whether to include subdirectories
+RECURSIVE = True
+
+all_code = []
+
+for root, dirs, files in os.walk(ROOT_DIR):
+    for file in files:
+        if file.endswith(".py"):
+            file_path = os.path.join(root, file)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    code = f.read()
+                    all_code.append(f"# --- File: {file_path} ---\n{code}\n")
+            except Exception as e:
+                print(f"❌ Failed to read {file_path}: {e}")
+    
+    if not RECURSIVE:
+        break  # Prevent going into subdirectories
+
+# Write to a single .txt file
+with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
+    out.write("\n\n".join(all_code))
+
+print(f"✅ All Python code has been written to: {OUTPUT_FILE}")
+
 
 
 # --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\logger.py ---
@@ -385,6 +573,7 @@ from data_generator import DataGenerator
 import os
 from dotenv import load_dotenv
 from logger import log
+import models
 import random
 
 load_dotenv()
@@ -430,6 +619,8 @@ def scheduled_stock_update():
     finally:
         db.close()
 
+print("Tables found:", Base.metadata.tables.keys())
+
 ENABLE_SCHEDULER = os.getenv("ENABLE_SCHEDULER", "false").lower() == "true"
 
 @asynccontextmanager
@@ -457,7 +648,7 @@ async def lifespan(app: FastAPI):
 
     if ENABLE_SCHEDULER:
         log.info("Scheduler is enabled.")
-        scheduler.add_job(scheduled_generate_product, "interval", seconds=60, id="generate_product")
+        scheduler.add_job(scheduled_generate_product, "interval", seconds=30, id="generate_product")
         scheduler.add_job(scheduled_price_update, "interval", seconds=60, id="price_update")
         scheduler.add_job(scheduled_stock_update, "interval", seconds=90, id="stock_update")
         scheduler.start()
@@ -500,6 +691,93 @@ def health_check():
     }
 
 
+
+# --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\models.py ---
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, JSON, DateTime, Numeric
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from database import Base
+from datetime import datetime, timezone
+
+# Utility function to get current UTC time
+def utc_now():
+    return datetime.now(timezone.utc)
+
+class Category(Base):
+    __tablename__ = "categories"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    parent = relationship("Category", remote_side=[id], back_populates="children")
+    children = relationship("Category", back_populates="parent", cascade="all, delete-orphan")
+    products = relationship("Product", back_populates="category", cascade="all, delete-orphan")
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, index=True)
+    price = Column(Numeric(10, 2), nullable=False, index=True)
+    brand = Column(String(100), index=True)
+    attributes = Column(JSON, nullable=True)
+    category_id = Column(Integer, ForeignKey('categories.id'))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    category = relationship("Category", back_populates="products")
+    price_history = relationship("PriceHistory", back_populates="product", cascade="all, delete-orphan")
+    inventory = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
+    stock_movements = relationship("StockMovement", back_populates="product", cascade="all, delete-orphan")
+
+
+class PriceHistory(Base):
+    __tablename__ = "product_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    old_price = Column(Numeric(10, 2), nullable=False)
+    new_price = Column(Numeric(10, 2), nullable=False)
+    changed_at = Column(DateTime, default=utc_now)
+    reason = Column(String(100), nullable=True)
+
+    product = relationship("Product", back_populates="price_history")
+
+class Inventory(Base):
+    __tablename__ = "inventory"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, unique=True)
+    quantity_available = Column(Integer, default=0)
+    quantity_reserve = Column(Integer, default=0)
+    reorder_level = Column(Integer, default=10)
+    reorder_quantity = Column(Integer, default=20)
+    unit_cost = Column(Numeric(10, 2), nullable=True)
+    last_restocked = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
+    batch_number = Column(String(100), nullable=True)
+    location = Column(String(100), nullable=True)
+    last_updated = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    product = relationship("Product", back_populates="inventory")
+
+
+class StockMovement(Base):
+    __tablename__ = "stock_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # order_id = Column(Integer, nullable=True)  # Simple approach
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    change = Column(Integer, nullable=False)
+    reason = Column(String(255), nullable=True)
+    timestamp = Column(DateTime, default=utc_now)
+
+    product = relationship("Product", back_populates="stock_movements")
+    # order_id: Optional[int] = None
 
 
 
@@ -556,7 +834,6 @@ class ProductBase(BaseModel):
     price: float
     category_id: int
     brand: Optional[str] = None
-    stock_quantity: int = 0
     attributes: Optional[Dict[str, Any]] = None
 
 class ProductCreate(ProductBase):
@@ -567,7 +844,6 @@ class ProductUpdate(BaseModel):
     price: Optional[float] = Field(None, gt=0, description="Price must be positive")
     category_id: Optional[int] = Field(None, gt=0, description="Category ID must be positive")
     brand: Optional[str] = Field(None, max_length=100)
-    stock_quantity: Optional[int] = Field(None, ge=0, description="Stock cannot be negative")
     attributes: Optional[Dict[str, Any]] = None
 
     @field_validator('name')
@@ -591,7 +867,6 @@ class ProductSummary(BaseModel):
     name: str
     price: float
     brand: Optional[str] = None
-    stock_quantity: int
     category_name: str
     rating: Optional[float] = None
 
@@ -619,6 +894,60 @@ class ProductListResponse(BaseModel):
     total_pages: int
     products: List[ProductSummary]
 
+# =========================================================
+# 🧮 INVENTORY SCHEMAS
+# =========================================================
+
+class InventoryBase(BaseModel):
+    quantity_available: int = 0
+    quantity_reserve: int = 0
+    reorder_level: Optional[int] = 10
+    reorder_quantity: Optional[int] = 20
+    unit_cost: Optional[float] = None
+    last_restocked: Optional[datetime] = None
+    expiry_date: Optional[datetime] = None
+    batch_number: Optional[str] = None
+    location: Optional[str] = None
+
+class Inventory(InventoryBase):
+    id: int
+    product_id: int
+    last_updated: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# In schemas.py
+class InventoryUpdate(BaseModel):
+    quantity_available: Optional[int] = Field(None, ge=0, description="Cannot be negative")
+    reorder_level: Optional[int] = Field(None, ge=0)
+    reorder_quantity: Optional[int] = Field(None, gt=0)
+    
+    @field_validator('reorder_quantity')
+    @classmethod
+    def validate_reorder_quantity(cls, v, info):
+        if v is not None and info.data.get('reorder_level') is not None:
+            if v <= info.data['reorder_level']:
+                raise ValueError('Reorder quantity should be greater than reorder level')
+        return v
+
+# =========================================================
+# 🔁 STOCK MOVEMENT SCHEMAS
+# =========================================================
+
+class StockMovementBase(BaseModel):
+    product_id: int
+    order_id: Optional[int] = None
+    change: int
+    reason: Optional[str] = None
+
+class StockMovement(StockMovementBase):
+    id: int
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
 
 
 # --- File: C:\Users\user\Documents\GitHub\Training\Day-09,10,11,12\Ecommerce_Products_API\routers\product_router.py ---
@@ -629,6 +958,7 @@ import schemas, crud
 from database import get_db
 from data_generator import DataGenerator
 from logger import log
+import models
 
 router = APIRouter(prefix="/products", tags=["Products"])
 generator = DataGenerator()
@@ -676,7 +1006,7 @@ def get_all_products(
             "name": product.name,
             "price": product.price,
             "brand": product.brand,
-            "stock_quantity": product.stock_quantity,
+            "stock_quantity": product.inventory.quantity_available if product.inventory else 0,
             "category_name": product.category.name if product.category else "Unknown",
             "rating": rating
         })
@@ -723,22 +1053,6 @@ def update_all_prices(
     return {"message": f"Price updated for {min(count, len(products))} products"}
 
 
-@router.post("/update-stock")
-def update_all_stocks(
-    count: int = Query(50, ge=1, le=500, description="Number of products to update"),
-    db: Session = Depends(get_db)
-):
-    log.info(f"Updating stock for {count} product(s)")
-    products = crud.get_all_products(db)
-    if not products:
-        log.warning("No products found to update stock")
-        return {"message": "No products found to update"}
-    generator.randomly_update_stocks(db, products, batch_size=count)
-    return {"message": f"Stock updated for {min(count, len(products))} products"}
-
-
-# Add this endpoint to your routers/product_router.py file
-
 @router.patch("/{product_id}", response_model=schemas.Product)
 def update_product(
     product_id: str,  # Accept string so name/brand are allowed
@@ -766,4 +1080,129 @@ def update_product(
     updated_product = crud.update_product(db, product.id, product_update)  # use actual ID
 
     return updated_product
+
+@router.get("/{product_id}/inventory", response_model=schemas.Inventory)
+def get_product_inventory(product_id: int, db: Session = Depends(get_db)):
+    inventory = crud.get_inventory_by_product_id(db, product_id)
+    if not inventory:
+        raise HTTPException(status_code=404, detail="Inventory not found")
+    return inventory
+
+@router.patch("/{product_id}/inventory")
+def adjust_inventory(
+    product_id: int,
+    quantity_delta: int,
+    reason: str = "manual adjustment",
+    order_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        updated_inventory = crud.update_inventory_quantity(
+            db, product_id, quantity_delta, reason, order_id
+        )
+        return {
+            "message": f"Inventory updated for Product ID {product_id}",
+            "new_quantity": updated_inventory.quantity_available
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/{product_id}/stock-movements", response_model=List[schemas.StockMovement])
+def get_stock_movements(product_id: int, db: Session = Depends(get_db)):
+    return crud.get_stock_movements_for_product(db, product_id)
+
+@router.patch("/{product_id}/inventory/settings", response_model=schemas.Inventory)
+def update_inventory_settings(
+    product_id: int,
+    inventory_update: schemas.InventoryUpdate,
+    db: Session = Depends(get_db)
+):
+    try:
+        updated_inventory = crud.update_inventory_settings(
+            db=db,
+            product_id=product_id,
+            update_data=inventory_update
+        )
+        return updated_inventory
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.patch("/{product_id}/inventory/reserve")
+def reserve_stock(
+    product_id: int,
+    quantity: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        inventory = crud.get_inventory_by_product_id(db, product_id)
+        if not inventory or inventory.quantity_available < quantity:
+            raise HTTPException(status_code=400, detail="Not enough stock available")
+
+        inventory.quantity_available -= quantity
+        inventory.quantity_reserve += quantity
+        db.add(inventory)
+
+        db.add(models.StockMovement(
+            product_id=product_id,
+            change=-quantity,
+            reason="reserved for cart"
+        ))
+        db.commit()
+        return {"message": "Stock reserved"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.patch("/{product_id}/inventory/release")
+def release_reserved_stock(
+    product_id: int,
+    quantity: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        inventory = crud.get_inventory_by_product_id(db, product_id)
+        if not inventory or inventory.quantity_reserve < quantity:
+            raise HTTPException(status_code=400, detail="Not enough reserved stock")
+
+        inventory.quantity_reserve -= quantity
+        inventory.quantity_available += quantity
+        db.add(inventory)
+
+        db.add(models.StockMovement(
+            product_id=product_id,
+            change=quantity,
+            reason="reservation released"
+        ))
+        db.commit()
+        return {"message": "Stock released back"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.patch("/{product_id}/inventory/order")
+def finalize_order_stock(
+    product_id: int,
+    quantity: int,
+    # order_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        inventory = crud.get_inventory_by_product_id(db, product_id)
+        if not inventory or inventory.quantity_reserve < quantity:
+            raise HTTPException(status_code=400, detail="Reserved stock insufficient")
+
+        inventory.quantity_reserve -= quantity
+        db.add(inventory)
+
+        db.add(models.StockMovement(
+            product_id=product_id,
+            change=-quantity,
+            reason="order placed",
+            # order_id=order_id
+        ))
+        db.commit()
+        return {"message": "Stock deducted and order confirmed"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 

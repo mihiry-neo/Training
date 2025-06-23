@@ -50,7 +50,6 @@ class ProductBase(BaseModel):
     price: float
     category_id: int
     brand: Optional[str] = None
-    stock_quantity: int = 0
     attributes: Optional[Dict[str, Any]] = None
 
 class ProductCreate(ProductBase):
@@ -61,7 +60,6 @@ class ProductUpdate(BaseModel):
     price: Optional[float] = Field(None, gt=0, description="Price must be positive")
     category_id: Optional[int] = Field(None, gt=0, description="Category ID must be positive")
     brand: Optional[str] = Field(None, max_length=100)
-    stock_quantity: Optional[int] = Field(None, ge=0, description="Stock cannot be negative")
     attributes: Optional[Dict[str, Any]] = None
 
     @field_validator('name')
@@ -85,7 +83,6 @@ class ProductSummary(BaseModel):
     name: str
     price: float
     brand: Optional[str] = None
-    stock_quantity: int
     category_name: str
     rating: Optional[float] = None
 
@@ -135,6 +132,20 @@ class Inventory(InventoryBase):
 
     class Config:
         from_attributes = True
+
+# In schemas.py
+class InventoryUpdate(BaseModel):
+    quantity_available: Optional[int] = Field(None, ge=0, description="Cannot be negative")
+    reorder_level: Optional[int] = Field(None, ge=0)
+    reorder_quantity: Optional[int] = Field(None, gt=0)
+    
+    @field_validator('reorder_quantity')
+    @classmethod
+    def validate_reorder_quantity(cls, v, info):
+        if v is not None and info.data.get('reorder_level') is not None:
+            if v <= info.data['reorder_level']:
+                raise ValueError('Reorder quantity should be greater than reorder level')
+        return v
 
 # =========================================================
 # 🔁 STOCK MOVEMENT SCHEMAS

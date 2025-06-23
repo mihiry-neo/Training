@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Union
 import schemas, crud
 from database import get_db
 from data_generator import DataGenerator
 from logger import log
+import models
 
 router = APIRouter(prefix="/products", tags=["Products"])
 generator = DataGenerator()
@@ -52,7 +54,7 @@ def get_all_products(
             "name": product.name,
             "price": product.price,
             "brand": product.brand,
-            "stock_quantity": product.stock_quantity,
+            "stock_quantity": product.inventory.quantity_available if product.inventory else 0,
             "category_name": product.category.name if product.category else "Unknown",
             "rating": rating
         })
@@ -98,22 +100,6 @@ def update_all_prices(
     generator.randomly_update_prices(db, products, batch_size=count)
     return {"message": f"Price updated for {min(count, len(products))} products"}
 
-
-@router.post("/update-stock")
-def update_all_stocks(
-    count: int = Query(50, ge=1, le=500, description="Number of products to update"),
-    db: Session = Depends(get_db)
-):
-    log.info(f"Updating stock for {count} product(s)")
-    products = crud.get_all_products(db)
-    if not products:
-        log.warning("No products found to update stock")
-        return {"message": "No products found to update"}
-    generator.randomly_update_stocks(db, products, batch_size=count)
-    return {"message": f"Stock updated for {min(count, len(products))} products"}
-
-
-# Add this endpoint to your routers/product_router.py file
 
 @router.patch("/{product_id}", response_model=schemas.Product)
 def update_product(
@@ -172,3 +158,214 @@ def adjust_inventory(
 @router.get("/{product_id}/stock-movements", response_model=List[schemas.StockMovement])
 def get_stock_movements(product_id: int, db: Session = Depends(get_db)):
     return crud.get_stock_movements_for_product(db, product_id)
+
+@router.patch("/{product_id}/inventory/settings", response_model=schemas.Inventory)
+def update_inventory_settings(
+    product_id: int,
+    inventory_update: schemas.InventoryUpdate,
+    db: Session = Depends(get_db)
+):
+    try:
+        updated_inventory = crud.update_inventory_settings(
+            db=db,
+            product_id=product_id,
+            update_data=inventory_update
+        )
+        return updated_inventory
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/reserve", response_model=dict)
+def reserve_products(
+    reservations: Union[List[dict], dict],  # Single item or list: {"product_id": 1, "quantity": 2}
+    order_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Reserve single or multiple products for an order (atomic operation)"""
+    # Normalize input - convert single item to list
+    if isinstance(reservations, dict):
+        reservations = [reservations]
+    
+    try:
+        reserved_items = []
+        
+        # First, validate all items can be reserved
+        for item in reservations:
+            inventory = crud.get_inventory_by_product_id(db, item["product_id"])
+            if not inventory or inventory.quantity_available < item["quantity"]:
+                db.rollback()
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Insufficient stock for product {item['product_id']} (requested: {item['quantity']}, available: {inventory.quantity_available if inventory else 0})"
+                )
+        
+        # Then reserve all items
+        for item in reservations:
+            inventory = crud.get_inventory_by_product_id(db, item["product_id"])
+            inventory.quantity_available -= item["quantity"]
+            inventory.quantity_reserve += item["quantity"]
+            
+            # Add stock movement
+            movement = models.StockMovement(
+                product_id=item["product_id"],
+                change=-item["quantity"],
+                reason=f"reserve_order_{order_id}" if order_id else "reserve"
+            )
+            db.add(movement)
+            reserved_items.append({
+                **item,
+                "remaining_available": inventory.quantity_available
+            })
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "reserved_items": reserved_items,
+            "total_items": len(reserved_items),
+            "order_id": order_id,
+            "message": f"Successfully reserved {len(reserved_items)} product(s)"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/release", response_model=dict)
+def release_products(
+    reservations: Union[List[dict], dict],  # Single item or list: {"product_id": 1, "quantity": 2}
+    order_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Release single or multiple reserved products (e.g., if user cancels checkout)"""
+    # Normalize input - convert single item to list
+    if isinstance(reservations, dict):
+        reservations = [reservations]
+    
+    try:
+        released_items = []
+        
+        for item in reservations:
+            inventory = crud.get_inventory_by_product_id(db, item["product_id"])
+            if inventory and inventory.quantity_reserve >= item["quantity"]:
+                inventory.quantity_reserve -= item["quantity"]
+                inventory.quantity_available += item["quantity"]
+                
+                # Add stock movement
+                movement = models.StockMovement(
+                    product_id=item["product_id"],
+                    change=item["quantity"],
+                    reason=f"release_order_{order_id}" if order_id else "release"
+                )
+                db.add(movement)
+                released_items.append({
+                    **item,
+                    "new_available": inventory.quantity_available
+                })
+        
+        db.commit()
+        return {
+            "success": True,
+            "released_items": released_items,
+            "total_items": len(released_items),
+            "order_id": order_id,
+            "message": f"Successfully released {len(released_items)} product(s)"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/finalize", response_model=dict)
+def finalize_products(
+    reservations: Union[List[dict], dict],  # Single item or list: {"product_id": 1, "quantity": 2}
+    order_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Finalize single or multiple reserved products (convert reserves to sold)"""
+    # Normalize input - convert single item to list
+    if isinstance(reservations, dict):
+        reservations = [reservations]
+    
+    try:
+        finalized_items = []
+        
+        for item in reservations:
+            inventory = crud.get_inventory_by_product_id(db, item["product_id"])
+            if inventory and inventory.quantity_reserve >= item["quantity"]:
+                inventory.quantity_reserve -= item["quantity"]
+                # Don't add back to available - it's sold
+                
+                # Add stock movement
+                movement = models.StockMovement(
+                    product_id=item["product_id"],
+                    change=-item["quantity"],
+                    reason=f"finalize_order_{order_id}" if order_id else "finalize"
+                )
+                db.add(movement)
+                finalized_items.append({
+                    **item,
+                    "remaining_reserved": inventory.quantity_reserve
+                })
+        
+        db.commit()
+        return {
+            "success": True,
+            "finalized_items": finalized_items,
+            "total_items": len(finalized_items),
+            "order_id": order_id,
+            "message": f"Successfully finalized {len(finalized_items)} product(s)"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/featured", response_model=List[dict])
+def get_featured_products(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """Get featured/popular products for homepage"""
+    # Logic: products with high ratings or recent high sales
+    products = db.query(models.Product)\
+        .join(models.Inventory)\
+        .filter(models.Inventory.quantity_available > 0)\
+        .order_by(desc(models.Product.created_at))\
+        .limit(limit).all()
+    
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "price": float(p.price),
+            "brand": p.brand,
+            "category_name": p.category.name if p.category else "Unknown",
+            "rating": p.attributes.get("rating") if p.attributes else None,
+            "stock_quantity": p.inventory.quantity_available if p.inventory else 0
+        } for p in products
+    ]
+
+@router.get("/recommendations/{user_id}", response_model=List[dict])
+def get_product_recommendations(
+    user_id: int,
+    limit: int = Query(5, ge=1, le=20),
+    db: Session = Depends(get_db)
+):
+    """Get personalized product recommendations"""
+    # Placeholder: In real implementation, this would use ML/user behavior
+    # For now, return popular products from different categories
+    products = db.query(models.Product)\
+        .join(models.Inventory)\
+        .filter(models.Inventory.quantity_available > 0)\
+        .order_by(func.random())\
+        .limit(limit).all()
+    
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "price": float(p.price),
+            "brand": p.brand,
+            "category_name": p.category.name if p.category else "Unknown",
+            "rating": p.attributes.get("rating") if p.attributes else None,
+            "stock_quantity": p.inventory.quantity_available if p.inventory else 0
+        } for p in products
+    ]
