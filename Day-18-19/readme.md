@@ -104,6 +104,112 @@
 
 ---
 
+## OOM Error in Executor
+
+**Understanding Executor Out of Memory Exceptions**  
+- Out of Memory exceptions can occur in Spark even when data processing appears feasible, mainly due to insufficient storage capacity.  
+- Executors handle multiple tasks, and if the combined data exceeds the configured memory limits, exceptions arise.  
+
+**Memory Management in Spark**  
+- Spark uses two types of memory management: Static and Unified.  
+- Unified memory manager allows dynamic allocation between storage and execution memory.  
+
+**Executor Memory Configuration**  
+- Executors have a fixed memory limit (e.g., 10GB), plus overhead memory (around 10%).  
+- Excessive data processing or concurrent tasks can exceed these limits, causing failure.  
+
+**Factors Leading to Exceptions**  
+- Large joins, aggregations, or data spills.  
+- Overloaded executors.  
+
+**Strategies for Optimal Memory Use**  
+- Partitioning, caching, and monitoring memory usage.  
+- Tuning executor memory and retrying failed tasks.
+
+---
+
+## Cache and Persist in PySpark
+
+**Caching in Spark**  
+- Stores intermediate results in memory to avoid recomputation.  
+- Best used for iterative or multi-action workflows.
+
+**Persisting in Spark**  
+- Same as caching, but allows custom storage levels: MEMORY_ONLY, DISK_ONLY, etc.  
+- Used when data is too large for memory or needed in multiple stages.
+
+**Differences**  
+- `cache()` = `persist()` with MEMORY_AND_DISK  
+- `persist()` = flexible
+
+**Memory and Eviction**  
+- Cached data may be evicted if memory fills.  
+- Monitor memory carefully.
+
+---
+
+## Dynamic Resource Allocation
+
+**Overview**  
+- Adjusts executors based on workload.  
+- Optimizes cluster usage and reduces idle time.
+
+**Key Concepts**  
+- Executors added/removed dynamically.  
+- Requires `spark.dynamicAllocation.enabled = true`.  
+
+**Challenges**  
+- Idle executor delays.  
+- Resource contention and tuning complexity.
+
+**When to Avoid**  
+- For production or predictable loads, static allocation is better.
+
+**Effective Configuration**  
+- Set min/max executors, timeout settings, enable Spark listener for tracking.
+
+---
+
+## Dynamic Partition Pruning
+
+**Introduction**  
+- DPP improves performance by skipping irrelevant partitions at runtime.  
+- Effective during joins with partitioned tables.
+
+**How It Works**  
+- Filters are applied dynamically based on join keys.  
+- Enabled by default in Spark 3.0+.
+
+**When It Works Best**  
+- One table partitioned, one small enough to broadcast.  
+- Both sides must support DPP for optimal effect.
+
+**Use Cases**  
+- ETL and analytical jobs with large fact tables and partition filters.
+
+---
+
+## Salting in Spark
+
+**Understanding Skewness**  
+- Data skew happens when one key gets too much data (e.g., single ID dominating join).
+
+**How to Fix with Salting**  
+- Add a random suffix to keys (e.g., `user_1`, `user_2`)  
+- Join using salted keys on both sides.
+
+**Post-Processing**  
+- After join, de-salt by removing randomness if needed.
+
+**When to Use**  
+- Severe skew causing one partition to lag or fail.
+
+**Pros & Cons**  
+- Reduces execution time but adds complexity.  
+- Requires changes to logic and additional columns.
+
+---
+
 ## Storage Formats
 
 - **Parquet**:
@@ -126,3 +232,8 @@ With replication factor = 3:
 - Block 1 → local rack,
 - Block 2 → same rack, different node,
 - Block 3 → different rack.
+
+
+## Netflix Data
+
+- Started working with Netflix data consisting of credits.csv and titles.csv
