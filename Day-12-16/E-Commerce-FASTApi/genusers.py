@@ -39,7 +39,7 @@ def filter_batch(batch):
         unique.append(r)
     return unique
  
-def main(total=50000, chunk_size=1000):
+def main(total=1000, chunk_size=100):
     db: Session = SessionLocal()
     count = 0
     for i in range(0, total, chunk_size):

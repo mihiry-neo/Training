@@ -39,4 +39,4 @@ def main(product_count: int = 1500):
     print(f"📦 Avg time per product: {(duration / len(products)):.4f} seconds" if products else "No products generated")
 
 if __name__ == "__main__":
-    main(product_count=20000)
+    main(product_count=1000)

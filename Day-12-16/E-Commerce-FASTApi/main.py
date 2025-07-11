@@ -22,22 +22,21 @@ from Users.models import User
 from Products.models import Product, Category
 from sqlalchemy.exc import SQLAlchemyError
 
-
-# ✅ Drop & recreate warehouse DB tables
+print("🧩 Tables detected:", list(Base.metadata.tables.keys()))
 Base.metadata.create_all(bind=engine)
-print("✅ Warehouse DB tables created.")
+print("Warehouse DB tables created.")
 
-# ✅ Create client DB tables if not already present
+# Create client DB tables if not already present
 client_url = os.getenv("DATABASE_URL2")
 if client_url:
     try:
         client_engine = create_engine_from_url(client_url)
         Base.metadata.create_all(bind=client_engine)
-        print("✅ Client DB tables created (if not existing).")
+        print("Client DB tables created (if not existing).")
     except SQLAlchemyError as e:
-        print(f"❌ Failed to create client DB tables: {e}")
+        print(f"Failed to create client DB tables: {e}")
 else:
-    print("⚠️ DATABASE_URL2 (client) not set in .env")
+    print("DATABASE_URL2 (client) not set in .env")
 
 # App setup
 generator = DataGenerator()
