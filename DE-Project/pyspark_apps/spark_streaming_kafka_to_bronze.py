@@ -26,6 +26,7 @@ def main(bootstrap_servers, topic, bronze_path):
         .option("kafka.bootstrap.servers", bootstrap_servers) \
         .option("subscribe", topic) \
         .option("startingOffsets", "latest") \
+        .option("failOnDataLoss", "false") \
         .load()
 
     df_parsed = df_kafka.selectExpr("CAST(value AS STRING) as json_str") \
