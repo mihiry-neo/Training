@@ -1,0 +1,1858 @@
+
+================================================================================
+File: .\docker-compose.yml
+================================================================================
+version: "3.9"
+
+services:
+
+  # ------------------ DATABASES ------------------
+
+  mysql_source:
+    image: mysql:8.0
+    container_name: mysql_source
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: newpassword123
+      MYSQL_DATABASE: ecommerce_db
+      MYSQL_USER: ecomuser
+      MYSQL_PASSWORD: ecompassword
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql_init:/docker-entrypoint-initdb.d
+    networks:
+      - ecommerce_network
+
+  postgres_dw:
+    image: postgres:15
+    container_name: postgres_dw
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres_init:/docker-entrypoint-initdb.d
+    networks:
+      - ecommerce_network
+
+  # ------------------ SPARK ------------------
+
+  spark-master:
+    image: bitnami/spark:3.5
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    volumes:
+      - ./pyspark_apps:/opt/bitnami/spark/apps
+      - ./data_lake:/opt/data_lake
+      - ./jars:/opt/spark/jars
+    networks:
+      - ecommerce_network
+
+  spark-worker:
+    image: bitnami/spark:3.5
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./pyspark_apps:/opt/bitnami/spark/apps
+      - ./data_lake:/opt/data_lake
+      - ./jars:/opt/spark/jars
+    networks:
+      - ecommerce_network
+
+  # ------------------ AIRFLOW ------------------
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: airflow-init-custom:2.8.0
+    container_name: airflow-init
+    depends_on:
+      - postgres_dw
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_dw:5432/airflow
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - AIRFLOW__WEBSERVER__SECRET_KEY=supersecurekey123
+      - AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX=True
+
+    volumes:
+      - ./airflow_dags:/opt/airflow/dags
+      - ./airflow_logs:/opt/airflow/logs
+      - ./airflow_plugins:/opt/airflow/plugins
+      - ./pyspark_apps:/opt/bitnami/spark/apps
+      - ./data_lake:/opt/data_lake
+      - ./jars:/opt/spark/jars
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create --username admin --password admin --firstname Air --lastname Flow --role Admin --email admin@example.com
+      "
+    networks:
+      - ecommerce_network
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: airflow-webserver-custom:2.8.0
+    container_name: airflow-webserver
+    restart: unless-stopped
+    depends_on:
+      - airflow-init
+      - spark-master
+      - spark-worker
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_dw:5432/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__SECRET_KEY=supersecurekey123
+      - AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX=True
+
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./airflow_dags:/opt/airflow/dags
+      - ./airflow_logs:/opt/airflow/logs
+      - ./airflow_plugins:/opt/airflow/plugins
+      - ./pyspark_apps:/opt/bitnami/spark/apps
+      - ./data_lake:/opt/data_lake
+      - ./jars:/opt/spark/jars
+    command: webserver
+    networks:
+      - ecommerce_network
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: airflow-scheduler-custom:2.8.0
+    container_name: airflow-scheduler
+    restart: unless-stopped
+    depends_on:
+      - airflow-init
+      - spark-master
+      - spark-worker
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres_dw:5432/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__SECRET_KEY=supersecurekey123
+      - AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX=True
+    volumes:
+      - ./airflow_dags:/opt/airflow/dags
+      - ./airflow_logs:/opt/airflow/logs
+      - ./airflow_plugins:/opt/airflow/plugins
+      - ./pyspark_apps:/opt/bitnami/spark/apps
+      - ./data_lake:/opt/data_lake
+      - ./jars:/opt/spark/jars
+    command: scheduler
+    networks:
+      - ecommerce_network
+
+  # ------------------ KAFKA ------------------
+
+  zookeeper:
+    image: bitnami/zookeeper:3.8
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - ecommerce_network
+
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+    depends_on:
+      - zookeeper
+    networks:
+      - ecommerce_network
+
+  # ------------------ POSTHOG PRODUCER/CONSUMER ------------------
+
+  posthog-event-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.posthog
+    container_name: posthog-event-producer
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=ecommerce_events
+    volumes:
+      - ./posthog_event_producer.py:/app/posthog_event_producer.py
+    command: >
+      python /app/posthog_event_producer.py
+    networks:
+      - ecommerce_network
+
+  posthog-event-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.posthog
+    container_name: posthog-event-consumer
+    depends_on:
+      - kafka
+    environment:
+      - POSTHOG_API_KEY=phc_G99FA88YoACm3vVv2zBfDf4uSnNOmDqOVTJoOy7U5w0
+      - POSTHOG_HOST=https://us.posthog.com
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=ecommerce_events
+    volumes:
+      - ./posthog_event_consumer.py:/app/posthog_event_consumer.py
+    command: >
+      python /app/posthog_event_consumer.py
+    networks:
+      - ecommerce_network
+
+  # ------------------ KAFKA UI (OPTIONAL) ------------------
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8082:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - ecommerce_network
+
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile.superset
+    container_name: superset
+    depends_on:
+      - postgres_dw
+    ports:
+      - "8088:8088"
+    environment:
+      ADMIN_USERNAME: admin
+      ADMIN_EMAIL: admin@superset.com
+      ADMIN_PASSWORD: admin
+      SUPERSET_SECRET_KEY: "a_very_strong_secret_key_for_superset"
+    volumes:
+      - superset_data:/app/superset_home
+    command: >
+      /bin/bash -c "
+        superset db upgrade &&
+        superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.com --password admin || true &&
+        superset init &&
+        superset run -h 0.0.0.0 -p 8088
+      "
+    networks:
+      - ecommerce_network
+
+
+# ------------------ VOLUMES & NETWORKS ------------------
+
+volumes:
+  mysql_data:
+  postgres_data:
+  superset_data:
+
+networks:
+  ecommerce_network:
+    driver: bridge
+
+
+
+================================================================================
+File: .\Dockerfile.posthog
+================================================================================
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.posthog.txt .
+
+RUN pip install --no-cache-dir -r requirements.posthog.txt
+
+COPY posthog_event_producer.py /app/
+COPY posthog_event_consumer.py /app/
+
+CMD ["sleep", "infinity"]  # override via docker-compose
+
+
+
+================================================================================
+File: .\extract.py
+================================================================================
+import os
+
+# Define extensions to include
+included_extensions = ['.py', '.yml', '.yaml', '.sql', '.sh', '.posthog']
+special_files = ['dockerfile']  # case-insensitive match
+excluded_dirs = {'project_venv', '__pycache__', '.git', 'node_modules', '.idea'}
+
+output_file = 'project_code_dump_mi.txt'
+base_dir = '.'  # starting directory
+
+with open(output_file, 'w', encoding='utf-8') as out:
+    for root, dirs, files in os.walk(base_dir):
+        # Exclude unwanted directories
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+
+        for file in files:
+            file_path = os.path.join(root, file)
+            file_lower = file.lower()
+
+            # Check if file matches included extensions or is a special name (e.g., Dockerfile)
+            if (
+                any(file_lower.endswith(ext) for ext in included_extensions) or
+                file_lower in special_files
+            ):
+                out.write(f"\n{'='*80}\n")
+                out.write(f"File: {file_path}\n")
+                out.write(f"{'='*80}\n")
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        out.write(f.read())
+                except Exception as e:
+                    out.write(f"Could not read file {file_path}: {e}")
+                out.write('\n\n')
+
+print(f"✅ Code exported to: {output_file}")
+
+
+
+================================================================================
+File: .\path.py
+================================================================================
+import os
+
+EXCLUDED_FOLDERS = {"spark_home"}
+PARTIAL_LIMITS = {
+    "airflow_logs": 5,   # Show only first 5 items
+    "data_lake": 5       # Show only first 5 items
+}
+visited_paths = set()
+
+
+def is_excluded(path):
+    """Check if path is under an excluded folder like spark_home."""
+    return any(folder in path.split(os.sep) for folder in EXCLUDED_FOLDERS)
+
+
+def get_partial_limit(folder_name):
+    """Return limit if folder has partial display rules."""
+    return PARTIAL_LIMITS.get(folder_name, None)
+
+
+def display_tree(path, prefix="", max_depth=None, current_depth=0, output_file=None):
+    """
+    Display folder structure as a tree and write unique paths to a file.
+    Includes limited items from airflow_logs and data_lake.
+    Skips everything under spark_home.
+    """
+    if max_depth is not None and current_depth > max_depth:
+        return
+
+    # Skip entire folder if under spark_home
+    if is_excluded(path):
+        return
+
+    try:
+        items = sorted(os.listdir(path))
+    except PermissionError:
+        print(f"{prefix}[Permission Denied]")
+        return
+
+    folder_name = os.path.basename(path)
+    limit = get_partial_limit(folder_name)
+    if limit is not None:
+        items = items[:limit]  # Trim items if limit set
+
+    for i, item in enumerate(items):
+        item_path = os.path.join(path, item)
+        is_last = (i == len(items) - 1)
+
+        # Avoid printing items under spark_home
+        if is_excluded(item_path):
+            continue
+
+        current_prefix = "└── " if is_last else "├── "
+        next_prefix = prefix + ("    " if is_last else "│   ")
+
+        # Print tree
+        print(f"{prefix}{current_prefix}{item}/" if os.path.isdir(item_path) else f"{prefix}{current_prefix}{item}")
+
+        # Write to file (only unique paths)
+        abs_path = os.path.abspath(item_path)
+        if output_file and abs_path not in visited_paths:
+            visited_paths.add(abs_path)
+            output_file.write(f"{abs_path}\n")
+
+        # Recurse if directory and not a symlink
+        if os.path.isdir(item_path) and not os.path.islink(item_path):
+            display_tree(item_path, next_prefix, max_depth, current_depth + 1, output_file)
+
+
+# === Main ===
+if __name__ == "__main__":
+    folder_path = "."  # Set your target folder here
+    output_file_path = "all_paths.txt"
+
+    print(f"Folder tree for: {os.path.abspath(folder_path)}")
+    print("=" * 60)
+
+    with open(output_file_path, "w", encoding="utf-8") as f:
+        display_tree(folder_path, max_depth=None, output_file=f)
+
+    print(f"\nUnique filtered paths saved to: {output_file_path}")
+
+
+
+================================================================================
+File: .\posthog_event_consumer.py
+================================================================================
+import json
+import time
+import logging
+import os
+from kafka import KafkaConsumer
+import posthog
+
+# === ENV CONFIG ===
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "ecommerce_events")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY")
+POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.posthog.com")
+
+# === SETUP LOGGING ===
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("PostHogConsumer")
+
+# === INITIALIZE POSTHOG SDK ===
+posthog.project_api_key = POSTHOG_API_KEY
+posthog.host = POSTHOG_HOST
+
+def send_to_posthog(event_data):
+    try:
+        distinct_id = event_data.get("user_id", "anonymous")
+        event_name = event_data.get("event", "unknown_event")
+        properties = event_data.get("properties", {})
+        posthog.capture(distinct_id=distinct_id, event=event_name, properties=properties)
+        logger.info(f"✅ Sent event '{event_name}' for user '{distinct_id}'")
+    except Exception as e:
+        logger.error(f"❌ Failed to send to PostHog: {e}")
+
+def consume_events():
+    consumer = KafkaConsumer(
+        KAFKA_TOPIC,
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+        auto_offset_reset="latest",
+        enable_auto_commit=True,
+        group_id="posthog-consumer-group"
+    )
+
+    logger.info(f"📡 Listening to Kafka topic: {KAFKA_TOPIC}")
+    for message in consumer:
+        event_data = message.value
+        logger.info(f"📥 Received event: {event_data}")
+        send_to_posthog(event_data)
+
+if __name__ == "__main__":
+    while True:
+        try:
+            consume_events()
+        except Exception as err:
+            logger.error(f"💥 Error in consumer: {err}")
+            time.sleep(5)  # Wait before retrying
+
+
+
+================================================================================
+File: .\posthog_event_producer.py
+================================================================================
+import json
+import random
+import time
+import logging
+from datetime import datetime
+from kafka import KafkaProducer
+from kafka.errors import NoBrokersAvailable
+
+# === CONFIG ===
+KAFKA_TOPIC = "ecommerce_events"
+KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"  # Correct for Docker Compose networking
+
+# === LOGGING ===
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("PostHogProducer")
+
+# === Sample Users and Events ===
+USERS = [f"user_{i:03d}" for i in range(1, 11)]
+PRODUCTS = [f"product_{i:03d}" for i in range(100, 110)]
+EVENTS = ["product_viewed", "add_to_cart", "checkout_initiated"]
+
+# === Wait for Kafka to Be Available ===
+def wait_for_kafka(server, retries=10, delay=5):
+    for i in range(retries):
+        try:
+            logger.info(f"⏳ Attempt {i+1}/{retries} - Connecting to Kafka at {server}")
+            producer = KafkaProducer(
+                bootstrap_servers=server,
+                value_serializer=lambda v: json.dumps(v).encode("utf-8")
+            )
+            logger.info("✅ Connected to Kafka successfully")
+            return producer
+        except NoBrokersAvailable:
+            logger.warning(f"❌ Kafka not ready. Retrying in {delay} seconds...")
+            time.sleep(delay)
+    raise Exception("🚨 Kafka connection failed after retries.")
+
+# === Event Generator ===
+def generate_event():
+    user = random.choice(USERS)
+    product = random.choice(PRODUCTS)
+    event_type = random.choice(EVENTS)
+    timestamp = datetime.utcnow().isoformat()
+    return {
+        "user_id": user,
+        "event": event_type,
+        "properties": {
+            "product_id": product,
+            "timestamp": timestamp,
+            "source": "posthog_event_producer"
+        }
+    }
+
+# === Main Producer Logic ===
+if __name__ == "__main__":
+    logger.info("📤 Starting PostHog Event Producer (Kafka)")
+    producer = wait_for_kafka(KAFKA_BOOTSTRAP_SERVERS)
+
+    try:
+        while True:
+            event = generate_event()
+            producer.send(KAFKA_TOPIC, value=event)
+            logger.info(f"📨 Sent event: {event}")
+            time.sleep(random.uniform(60, 180))  # Simulate traffic
+    except KeyboardInterrupt:
+        logger.info("🛑 Producer stopped manually")
+    finally:
+        producer.flush()
+        producer.close()
+        logger.info("✅ Kafka producer closed cleanly")
+
+
+
+================================================================================
+File: .\test_connection.sh
+================================================================================
+
+
+
+================================================================================
+File: .\airflow_dags\archive_dag.py
+================================================================================
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.empty import EmptyOperator
+from airflow.utils.task_group import TaskGroup
+from datetime import datetime, timedelta
+import os
+import shutil
+import logging
+
+# === Paths & Configuration ===
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_LAKE_PATH = os.path.join(PROJECT_ROOT, '..', 'data_lake')
+BRONZE_BASE_PATH = os.path.join(DATA_LAKE_PATH, 'bronze')
+ARCHIVE_BASE_PATH = os.path.join(DATA_LAKE_PATH, 'archive', 'bronze')
+RETENTION_DAYS_BRONZE = 1  # Archive data older than 1 year
+BRONZE_TABLES = ['orders', 'customers', 'products']  # Add more tables here if needed
+
+def archive_old_bronze_data(base_bronze_path, archive_bronze_path, retention_days, table_name):
+    """Archives bronze data older than retention_days."""
+    log = logging.getLogger("airflow.task")
+    source_table_path = os.path.join(base_bronze_path, "mysql", table_name)
+    archive_table_path = os.path.join(archive_bronze_path, "mysql", table_name)
+    os.makedirs(archive_table_path, exist_ok=True)
+
+    cutoff_date = datetime.now() - timedelta(days=retention_days)
+    archived_count = 0
+
+    for year_dir in os.listdir(source_table_path):
+        year_path = os.path.join(source_table_path, year_dir)
+        if not os.path.isdir(year_path) or not year_dir.isdigit():
+            continue
+        for month_dir in os.listdir(year_path):
+            month_path = os.path.join(year_path, month_dir)
+            if not os.path.isdir(month_path) or not month_dir.isdigit():
+                continue
+            for day_dir in os.listdir(month_path):
+                day_path = os.path.join(month_path, day_dir)
+                if not os.path.isdir(day_path) or not day_dir.isdigit():
+                    continue
+                try:
+                    current_date = datetime(int(year_dir), int(month_dir), int(day_dir))
+                except ValueError:
+                    continue
+                if current_date < cutoff_date:
+                    versioned_day = f"{day_dir}_archived_on={datetime.today().date()}"
+                    dest_path = os.path.join(archive_table_path, year_dir, month_dir, versioned_day)
+
+                    if os.path.exists(dest_path):
+                        log.warning(f"[SKIPPED] Already archived: {dest_path}")
+                        continue
+
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    shutil.move(day_path, dest_path)
+                    log.info(f"[ARCHIVED] {day_path} → {dest_path}")
+                    archived_count += 1
+
+    if archived_count == 0:
+        log.info(f"[NO DATA] Nothing to archive for table '{table_name}'.")
+    else:
+        log.info(f"[SUMMARY] Archived {archived_count} partition(s) for '{table_name}'.")
+
+# === Airflow DAG definition ===
+default_args_archive = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'start_date': datetime(2024, 1, 1),
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
+
+with DAG(
+    dag_id='data_archival_pipeline',
+    default_args=default_args_archive,
+    description='Monthly Data Archival for Bronze Tier',
+    schedule_interval='@monthly',
+    catchup=False,
+    tags=['ecommerce', 'archive'],
+) as dag:
+
+    start = EmptyOperator(task_id='start_archival')
+
+    with TaskGroup(group_id="archive_bronze_tables") as archive_tasks:
+        for table in BRONZE_TABLES:
+            PythonOperator(
+                task_id=f'archive_{table}',
+                python_callable=archive_old_bronze_data,
+                op_kwargs={
+                    'base_bronze_path': BRONZE_BASE_PATH,
+                    'archive_bronze_path': ARCHIVE_BASE_PATH,
+                    'retention_days': RETENTION_DAYS_BRONZE,
+                    'table_name': table
+                }
+            )
+
+    end = EmptyOperator(task_id='end_archival')
+
+    start >> archive_tasks >> end
+
+
+
+================================================================================
+File: .\airflow_dags\ecommerce_pipeline_dag.py
+================================================================================
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from datetime import datetime, timedelta
+
+default_args = {
+    'owner': 'airflow',
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'email_on_success': False,
+    'depends_on_past': False,
+    'start_date': datetime(2025, 6, 4),
+    'retries': 1,
+    'retry_delay': timedelta(minutes=3),
+}
+
+with DAG(
+    dag_id='ecommerce_medallion_pipeline',
+    default_args=default_args,
+    schedule_interval='@daily',
+    catchup=False,
+    tags=['ecommerce', 'medallion', 'spark']
+) as dag:
+
+    bronze_customers = BashOperator(
+        task_id='bronze_ingest_customers',
+        bash_command="""
+            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar /opt/bitnami/spark/apps/bronze_ingestion.py \
+            jdbc:mysql://mysql_source:3306/ecommerce_db ecomuser ecompassword customers /opt/data_lake/bronze {{ ds }}
+        """
+    )
+
+    bronze_products = BashOperator(
+        task_id='bronze_ingest_products',
+        bash_command="""
+            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar /opt/bitnami/spark/apps/bronze_ingestion.py \
+            jdbc:mysql://mysql_source:3306/ecommerce_db ecomuser ecompassword products /opt/data_lake/bronze {{ ds }}
+        """
+    )
+
+    bronze_orders = BashOperator(
+        task_id='bronze_ingest_orders',
+        bash_command="""
+            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar /opt/bitnami/spark/apps/bronze_ingestion.py \
+            jdbc:mysql://mysql_source:3306/ecommerce_db ecomuser ecompassword orders /opt/data_lake/bronze {{ ds }}
+        """
+    )
+
+    silver_processing = BashOperator(
+        task_id='silver_processing',
+        bash_command="""
+            spark-submit /opt/bitnami/spark/apps/silver_processing.py \
+            /opt/data_lake/bronze/mysql /opt/data_lake/silver {{ ds }}
+        """
+    )
+
+    gold_aggregation = BashOperator(
+        task_id='gold_aggregation',
+        bash_command="""
+            spark-submit /opt/bitnami/spark/apps/gold_aggregation.py \
+            /opt/data_lake/silver /opt/data_lake/gold {{ ds }}
+        """
+    )
+
+    load_to_warehouse = BashOperator(
+        task_id='load_to_warehouse',
+        bash_command="""
+            spark-submit --jars /opt/spark/jars/postgresql-42.7.3.jar /opt/bitnami/spark/apps/load_to_warehouse.py \
+            /opt/data_lake/gold jdbc:postgresql://postgres_dw:5432/airflow \
+            airflow airflow {{ ds }}
+        """
+    )
+
+
+    [bronze_orders, bronze_products, bronze_customers] >> silver_processing >> gold_aggregation >> load_to_warehouse
+
+
+
+================================================================================
+File: .\airflow_dags\kafka_stream_to_bronze_dag.py
+================================================================================
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from datetime import datetime
+
+default_args = {
+    'start_date': datetime(2025, 7, 24),
+}
+
+with DAG('kafka_stream_to_bronze_bash_dag',
+         default_args=default_args,
+         schedule_interval=None,
+         catchup=False) as dag:
+
+    stream_kafka_to_bronze = BashOperator(
+        task_id='stream_kafka_to_bronze',
+        bash_command="""
+        spark-submit \
+        --master spark://spark-master:7077 \
+        --deploy-mode client \
+        /opt/bitnami/spark/apps/spark_streaming_kafka_to_bronze.py /opt/data_lake/bronze/events
+        """
+    )
+
+
+
+================================================================================
+File: .\airflow_dags\config\spark_job_config.py
+================================================================================
+# dags/config/spark_job_config.py
+
+SPARK_MASTER = "spark://spark-master:7077"
+SPARK_CONF = {"spark.master": SPARK_MASTER}
+SPARK_PACKAGES = {
+    "mysql": "mysql:mysql-connector-java:8.0.33",
+    "postgres": "org.postgresql:postgresql:42.6.0",
+}
+JDBC_URLS = {
+    "mysql": "jdbc:mysql://mysql_source:3306/ecommerce_daily_db",
+    "postgres": "jdbc:postgresql://postgres_dwh:5432/ecommerce_dwh",
+}
+CREDENTIALS = {
+    "mysql": {
+        "user": "ecomuser",
+        "password": "ecompassword",
+    },
+    "postgres": {
+        "user": "airflow",
+        "password": "airflow",
+    }
+}
+
+
+
+================================================================================
+File: .\mysql_init\init.sql
+================================================================================
+CREATE DATABASE IF NOT EXISTS ecommerce_db;
+USE ecommerce_db;
+
+-- Customers table
+CREATE TABLE IF NOT EXISTS customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    phone VARCHAR(20),
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Products table
+CREATE TABLE IF NOT EXISTS products (
+    product_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(255),
+    category VARCHAR(100),
+    price DECIMAL(10,2),
+    stock_quantity INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Orders table
+CREATE TABLE IF NOT EXISTS orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    product_id INT,
+    quantity INT,
+    total_price DECIMAL(10,2),
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (product_id) REFERENCES products(product_id)
+);
+
+INSERT INTO customers (name, email, phone, address)
+VALUES 
+('Riya Sharma', 'riya@gmail.com', '9876543210', 'Delhi'),
+('Simran Kaur', 'simran@outlook.com', '9998887771', 'Chandigarh'),
+('Raj Mehta', 'raj.mehta@gmail.com', '8887776662', 'Ahmedabad'),
+('Anjali Rao', 'anjali_rao@gmail.com', '7776665553', 'Hyderabad'),
+('Yash Jain', 'yash_jain@ymail.com', '6665554444', 'Bengaluru'),
+('Tanya Kapoor', 'tanya.kapoor@gmail.com', '9551234567', 'Pune'),
+('Aman Verma', 'aman@yahoo.com', '9123456789', 'Mumbai');
+
+INSERT INTO products (product_name, category, price, stock_quantity)
+VALUES 
+('iPhone 14', 'Electronics', 99999.99, 25),
+('Samsung Galaxy S23', 'Electronics', 74999.99, 50),
+('AirPods Pro', 'Electronics', 24999.99, 200),
+('Nike Backpack', 'Accessories', 1499.00, 150),
+('Gaming Chair', 'Furniture', 17999.99, 30),
+('Kindle Paperwhite', 'Electronics', 13999.99, 40),
+('Running Shoes', 'Footwear', 2999.99, 100);
+        
+INSERT INTO orders (customer_id, product_id, quantity, total_price)
+VALUES 
+(1, 1, 1, 99999.99),
+(3, 3, 1, 2999.99),
+(4, 5, 2, 49999.98),
+(5, 4, 1, 17999.99),
+(2, 6, 1, 74999.99),
+(1, 7, 3, 4497.00),
+(3, 6, 1, 13999.99),
+(4, 2, 1, 24999.99),
+(5, 1, 1, 17999.99),
+(1, 5, 2, 49999.98),
+(2, 2, 2, 5999.98);
+
+
+================================================================================
+File: .\postgres_init\init_dw.sql
+================================================================================
+-- Create the target database (only if running from psql shell, not inside container entrypoint)
+-- CREATE DATABASE ecommerce_warehouse;
+-- \c ecommerce_warehouse;
+
+-- SCHEMAS
+CREATE SCHEMA IF NOT EXISTS facts;
+CREATE SCHEMA IF NOT EXISTS dimensions;
+
+-- ========================
+-- DIMENSIONS
+-- ========================
+
+-- Dimension: Customers
+CREATE TABLE IF NOT EXISTS dimensions.dim_customers (
+    customer_sk SERIAL PRIMARY KEY,
+    customer_id INT,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    phone VARCHAR(20),
+    city VARCHAR(100),
+    created_at TIMESTAMP
+);
+
+-- Dimension: Products
+CREATE TABLE IF NOT EXISTS dimensions.dim_products (
+    product_sk SERIAL PRIMARY KEY,
+    product_id INT,
+    product_name VARCHAR(255),
+    category VARCHAR(100),
+    price DECIMAL(10,2),
+    created_at TIMESTAMP
+);
+
+-- Customer Segments (Gold Output)
+CREATE TABLE IF NOT EXISTS dimensions.customer_segments (
+    segment_sk SERIAL PRIMARY KEY,
+    customer_id INT,
+    recency_days INT,
+    frequency INT,
+    monetary_value DECIMAL(12,2),
+    segment VARCHAR(50),
+    report_date TIMESTAMP
+);
+
+-- ========================
+-- FACTS
+-- ========================
+
+-- Fact: Orders (from Gold product performance)
+CREATE TABLE IF NOT EXISTS facts.fact_orders (
+    order_sk SERIAL PRIMARY KEY,
+    order_id INT,
+    customer_sk INT,
+    product_sk INT,
+    quantity INT,
+    total_price DECIMAL(10,2),
+    order_date TIMESTAMP,
+    FOREIGN KEY (customer_sk) REFERENCES dimensions.dim_customers(customer_sk),
+    FOREIGN KEY (product_sk) REFERENCES dimensions.dim_products(product_sk)
+);
+
+-- Fact: Sales Summary (Gold Aggregation)
+CREATE TABLE IF NOT EXISTS facts.sales_summary (
+    summary_sk SERIAL PRIMARY KEY,
+    order_date TIMESTAMP,
+    total_orders INT,
+    total_sales DECIMAL(12,2),
+    avg_order_value DECIMAL(10,2),
+    report_date TIMESTAMP
+);
+
+
+
+================================================================================
+File: .\pyspark_apps\bronze_ingestion.py
+================================================================================
+from pyspark.sql import SparkSession
+import sys
+import os
+
+def bronze_ingest(spark, jdbc_url, props, table, bronze_path, processing_date):
+    print(f"\n🔄 Starting Bronze Ingestion for table: {table}")
+
+    try:
+        # Read from MySQL using JDBC
+        df = spark.read.jdbc(url=jdbc_url, table=table, properties=props)
+
+        # Parse date from CLI
+        year, month, day = processing_date.split("-")
+
+        # Define HDFS/Local output path
+        output_path = os.path.join(bronze_path, "mysql", table, year, month, day)
+        print(f"📁 Writing output to: {output_path}")
+
+        # Write as Parquet
+        df.write.mode("overwrite").parquet(output_path)
+        print(f"✅ Successfully ingested '{table}' to Bronze at {output_path}\n")
+
+    except Exception as e:
+        print(f"❌ Error during ingestion: {e}")
+        raise
+
+if __name__ == "__main__":
+    if len(sys.argv) != 7:
+        print("\n❌ Usage: python bronze_ingestion.py <jdbc_url> <user> <password> <table> <bronze_path> <processing_date YYYY-MM-DD>\n")
+        sys.exit(1)
+
+    jdbc_url = sys.argv[1]
+    user = sys.argv[2]
+    pwd = sys.argv[3]
+    table_name = sys.argv[4]
+    bronze_path = sys.argv[5]
+    processing_date = sys.argv[6]  # Expects format: YYYY-MM-DD
+
+    spark = SparkSession.builder \
+        .appName(f"BronzeIngest_{table_name}") \
+        .getOrCreate()
+
+    conn_props = {
+        "user": user,
+        "password": pwd,
+        "driver": "com.mysql.cj.jdbc.Driver"
+    }
+
+    bronze_ingest(spark, jdbc_url, conn_props, table_name, bronze_path, processing_date)
+
+    spark.stop()
+
+
+
+================================================================================
+File: .\pyspark_apps\gold_aggregation.py
+================================================================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as _sum, count as _count, date_format, lit, max as _max, datediff, when
+import sys
+import os
+
+def create_product_performance_summary(spark, silver_base_path, gold_base_path, processing_date_str):
+    silver_orders_path = os.path.join(silver_base_path, f"orders_cleaned/processed_date={processing_date_str}")
+    gold_product_summary_path = os.path.join(gold_base_path, f"product_daily_performance/report_date={processing_date_str}")
+
+    print(f"\n🔍 Reading cleaned orders from: {silver_orders_path}")
+    try:
+        df_orders_silver = spark.read.parquet(silver_orders_path)
+
+        df_product_summary = (
+            df_orders_silver.groupBy(
+                col("product_id"),
+                date_format(col("order_date"), "yyyy-MM-dd").alias("sale_date")
+            )
+            .agg(
+                _count("order_id").alias("orders_count"),
+                _sum("total_price").alias("total_sales")
+            )
+            .withColumn("report_date", lit(processing_date_str))
+        )
+
+        print(f"📁 Writing product performance summary to: {gold_product_summary_path}")
+        df_product_summary.write.mode("overwrite").parquet(gold_product_summary_path)
+
+        print(f"✅ Successfully created product performance summary: {gold_product_summary_path}\n")
+    except Exception as e:
+        print(f"❌ Error during product performance summary: {e}")
+        raise
+
+def create_sales_daily_summary(spark, silver_base_path, gold_base_path, processing_date_str):
+    silver_orders_path = os.path.join(silver_base_path, f"orders_cleaned/processed_date={processing_date_str}")
+    gold_summary_path = os.path.join(gold_base_path, f"sales_daily_summary/report_date={processing_date_str}")
+
+    df_orders = spark.read.parquet(silver_orders_path)
+    df_summary = df_orders.groupBy("order_date").agg(
+        _count("order_id").alias("orders_count"),
+        _sum("total_price").alias("total_sales")
+    ).withColumn("report_date", lit(processing_date_str))
+
+    df_summary.write.mode("overwrite").parquet(gold_summary_path)
+
+def create_customer_segments(spark, silver_path, gold_path, processing_date):
+    df = spark.read.parquet(os.path.join(silver_path, f"orders_cleaned/processed_date={processing_date}"))
+
+    df_rfm = df.groupBy("customer_id").agg(
+        _max("order_date").alias("last_order_date"),
+        _count("order_id").alias("frequency"),
+        _sum("total_price").alias("monetary_value")
+    )
+
+    df_rfm = df_rfm.withColumn("recency_days", datediff(lit(processing_date), col("last_order_date")))
+
+    df_segmented = df_rfm.withColumn("segment", when(
+        (col("recency_days") <= 30) & (col("frequency") >= 5) & (col("monetary_value") >= 5000), "Platinum"
+    ).when(
+        (col("recency_days") <= 60) & (col("frequency") >= 3), "Gold"
+    ).when(
+        (col("recency_days") <= 90) & (col("frequency") >= 2), "Silver"
+    ).otherwise("Bronze"))
+
+    df_segmented = df_segmented.withColumn("report_date", lit(processing_date))
+
+    output_path = os.path.join(gold_path, f"customer_segments/report_date={processing_date}")
+    df_segmented.write.mode("overwrite").parquet(output_path)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("\n❌ Usage: python gold_aggregation_cleaned.py <silver_base_path> <gold_base_path> <processing_date YYYY-MM-DD>\n")
+        sys.exit(1)
+
+    silver_path_arg = sys.argv[1]
+    gold_path_arg = sys.argv[2]
+    date_arg = sys.argv[3]
+
+    spark_session = SparkSession.builder.appName("GoldAggregationCleaned").getOrCreate()
+
+    create_product_performance_summary(spark_session, silver_path_arg, gold_path_arg, date_arg)
+    create_sales_daily_summary(spark_session, silver_path_arg, gold_path_arg, date_arg)
+    create_customer_segments(spark_session, silver_path_arg, gold_path_arg, date_arg)
+
+    spark_session.stop()
+
+
+
+================================================================================
+File: .\pyspark_apps\load_to_warehouse.py
+================================================================================
+from pyspark.sql import SparkSession
+import sys
+import os
+import traceback
+
+def load_gold_table_to_postgres(spark, gold_table_path, pg_jdbc_url, connection_properties, target_table_name):
+    """Loads a Gold Parquet table to a PostgreSQL table."""
+    print(f"\n[INFO] Reading Gold data from: {gold_table_path}")
+    try:
+        df_gold = spark.read.parquet(gold_table_path)
+
+        if df_gold.rdd.isEmpty():
+            print(f"[WARNING] Skipped {target_table_name} – DataFrame is empty.")
+            return
+
+        print(f"[INFO] Writing to PostgreSQL table: {target_table_name}")
+        df_gold.write \
+            .mode("overwrite") \
+            .jdbc(url=pg_jdbc_url, table=target_table_name, properties=connection_properties)
+
+        print(f"[SUCCESS] Loaded data to PostgreSQL: {target_table_name}")
+
+    except Exception as e:
+        print(f"[ERROR] Failed to load {target_table_name} from path {gold_table_path}: {str(e)}")
+        traceback.print_exc()
+        raise
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 6:
+        print("Usage: load_to_warehouse.py <gold_base_path> <pg_jdbc_url> <user> <password> <processing_date YYYY-MM-DD>")
+        sys.exit(1)
+
+    gold_base_path = sys.argv[1]      # e.g. /opt/data_lake/gold
+    pg_jdbc_url = sys.argv[2]
+    pg_user = sys.argv[3]
+    pg_password = sys.argv[4]
+    processing_date = sys.argv[5]
+
+    print(f"\n[INFO] Starting warehouse load for date: {processing_date}")
+    spark = SparkSession.builder.appName("LoadGoldToWarehouse").getOrCreate()
+
+    connection_props = {
+        "user": pg_user,
+        "password": pg_password,
+        "driver": "org.postgresql.Driver"
+    }
+
+    # Gold tables and their target PostgreSQL warehouse destinations
+    gold_targets = {
+        "product_daily_performance": "facts.fact_orders",
+        "sales_daily_summary": "facts.sales_summary",
+        "customer_segments": "dimensions.customer_segments"
+    }
+
+    for gold_folder, target_table in gold_targets.items():
+        full_gold_path = os.path.join(gold_base_path, f"{gold_folder}/report_date={processing_date}")
+        print(f"\n[INFO] Processing: {gold_folder} → {target_table}")
+        load_gold_table_to_postgres(
+            spark,
+            full_gold_path,
+            pg_jdbc_url,
+            connection_props,
+            target_table
+        )
+
+    print("\n[SUCCESS] All gold tables processed successfully.\n")
+    spark.stop()
+
+
+
+================================================================================
+File: .\pyspark_apps\silver_processing.py
+================================================================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lower, trim, to_date, split, when, lit, round as spark_round
+from pyspark.sql.utils import AnalysisException
+import sys
+import os
+
+
+def process_customers_to_silver(spark, bronze_base_path, silver_base_path, processing_date_str):
+    """Cleans and transforms raw customers data to the Silver layer."""
+    year, month, day = processing_date_str.split('-')
+    raw_customers_path = os.path.join(bronze_base_path, "customers", year, month, day)
+    silver_customers_path = os.path.join(silver_base_path, f"customers_cleaned/processed_date={processing_date_str}")
+
+    print(f"\n👤 Processing customers from: {raw_customers_path}")
+    try:
+        df_customers = spark.read.parquet(raw_customers_path)
+
+        df_customers = df_customers.withColumn("name_parts", split(col("name"), " ")) \
+                                   .withColumn("first_name", lower(trim(col("name_parts").getItem(0)))) \
+                                   .withColumn("last_name", lower(trim(
+                                       when(col("name_parts").getItem(1).isNotNull(), col("name_parts").getItem(1))
+                                       .otherwise(lit("")))))
+
+        df_customers_cleaned = df_customers.withColumn("email", lower(trim(col("email")))) \
+                                           .withColumn("signup_date", to_date(col("created_at"), "yyyy-MM-dd")) \
+                                           .fillna({
+                                               "email": "unknown@example.com",
+                                               "signup_date": "2000-01-01"
+                                           })
+
+        df_customers_silver = df_customers_cleaned.select(
+            col("customer_id").cast("int"),
+            col("first_name"),
+            col("last_name"),
+            col("email"),
+            col("signup_date"),
+            col("address").cast("string")
+        )
+
+        df_customers_silver.write.mode("overwrite").parquet(silver_customers_path)
+        print(f"✅ Customers written to Silver: {silver_customers_path}")
+
+    except AnalysisException:
+        print(f"⚠️ No customers data found at: {raw_customers_path} — skipping.")
+    except Exception as e:
+        print(f"❌ Error processing customers: {e}")
+        raise
+
+
+def process_products_to_silver(spark, bronze_base_path, silver_base_path, processing_date_str):
+    year, month, day = processing_date_str.split('-')
+    raw_products_path = os.path.join(bronze_base_path, "products", year, month, day)
+    silver_products_path = os.path.join(silver_base_path, f"products_cleaned/processed_date={processing_date_str}")
+
+    print(f"\n📦 Processing products from: {raw_products_path}")
+    try:
+        df = spark.read.parquet(raw_products_path)
+
+        df_cleaned = df.filter(
+            (col("product_id").isNotNull()) &
+            (col("product_name").isNotNull()) &
+            (col("price") > 0) &
+            (col("stock_quantity") >= 0)
+        )
+
+        df_silver = df_cleaned.select(
+            col("product_id").cast("int"),
+            col("product_name"),
+            col("category"),
+            col("price").cast("double"),
+            col("stock_quantity").cast("int"),
+            to_date(col("created_at")).alias("created_date")
+        )
+
+        df_silver.write.mode("overwrite").parquet(silver_products_path)
+        print(f"✅ Products written to Silver: {silver_products_path}")
+
+    except AnalysisException:
+        print(f"⚠️ No products data found at: {raw_products_path} — skipping.")
+    except Exception as e:
+        print(f"❌ Error processing products: {e}")
+        raise
+
+
+def process_orders_to_silver(spark, bronze_base_path, silver_base_path, processing_date_str):
+    year, month, day = processing_date_str.split('-')
+    raw_orders_path = os.path.join(bronze_base_path, "orders", year, month, day)
+    silver_orders_path = os.path.join(silver_base_path, f"orders_cleaned/processed_date={processing_date_str}")
+    silver_customers_path = os.path.join(silver_base_path, f"customers_cleaned/processed_date={processing_date_str}")
+    silver_products_path = os.path.join(silver_base_path, f"products_cleaned/processed_date={processing_date_str}")
+
+    print(f"\n🧾 Processing orders from: {raw_orders_path}")
+    try:
+        orders_df = spark.read.parquet(raw_orders_path)
+        customers_df = spark.read.parquet(silver_customers_path)
+        products_df = spark.read.parquet(silver_products_path)
+
+        df = orders_df.join(customers_df.select("customer_id"), on="customer_id", how="inner") \
+                      .join(products_df.select("product_id", "price"), on="product_id", how="inner") \
+                      .filter(col("quantity") > 0)
+
+        df = df.withColumn("expected_price", spark_round(col("price") * col("quantity"), 2)) \
+               .withColumn("total_price", col("expected_price")) \
+               .drop("expected_price")
+
+        df_silver = df.select(
+            col("order_id").cast("int"),
+            col("customer_id").cast("int"),
+            col("product_id").cast("int"),
+            col("quantity").cast("int"),
+            col("total_price").cast("double"),
+            to_date(col("order_date")).alias("order_date")
+        )
+
+        df_silver.write.mode("overwrite").parquet(silver_orders_path)
+        print(f"✅ Orders written to Silver: {silver_orders_path}")
+
+    except AnalysisException:
+        print(f"⚠️ Missing orders or reference data. Skipping orders transformation.")
+    except Exception as e:
+        print(f"❌ Error processing orders: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("\n❌ Usage: python silver_processing.py <bronze_base_path> <silver_base_path> <processing_date YYYY-MM-DD>\n")
+        sys.exit(1)
+
+    bronze_path = sys.argv[1]   # Expects: /opt/ecommerce_data_lake/bronze/mysql
+    silver_path = sys.argv[2]   # Expects: /opt/ecommerce_data_lake/silver
+    processing_date = sys.argv[3]
+
+    spark = SparkSession.builder.appName("SilverProcessingEcommerce").getOrCreate()
+
+    process_customers_to_silver(spark, bronze_path, silver_path, processing_date)
+    process_products_to_silver(spark, bronze_path, silver_path, processing_date)
+    process_orders_to_silver(spark, bronze_path, silver_path, processing_date)
+
+    spark.stop()
+
+
+
+================================================================================
+File: .\pyspark_apps\spark_streaming_kafka_to_bronze.py
+================================================================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json, lit, current_timestamp
+from pyspark.sql.types import StructType, StringType, TimestampType
+import sys
+
+KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
+KAFKA_TOPIC = "ecommerce_events"
+
+# Define schema of incoming Kafka events
+event_schema = StructType() \
+    .add("user_id", StringType()) \
+    .add("event", StringType()) \
+    .add("properties", StructType()
+        .add("product_id", StringType())
+        .add("timestamp", StringType())
+        .add("source", StringType())
+    )
+
+if len(sys.argv) != 2:
+    print("Usage: spark_streaming_kafka_to_bronze.py <bronze_output_path>")
+    sys.exit(1)
+
+bronze_path = sys.argv[1]
+
+spark = SparkSession.builder \
+    .appName("KafkaToBronze") \
+    .master("spark://spark-master:7077") \
+    .getOrCreate()
+
+
+# Read from Kafka
+df_kafka = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
+    .option("subscribe", KAFKA_TOPIC) \
+    .option("startingOffsets", "latest") \
+    .load()
+
+# Deserialize JSON payload
+df_parsed = df_kafka.selectExpr("CAST(value AS STRING) as json_str") \
+    .select(from_json(col("json_str"), event_schema).alias("data")) \
+    .select(
+        col("data.user_id"),
+        col("data.event"),
+        col("data.properties.product_id"),
+        col("data.properties.timestamp").alias("event_ts"),
+        col("data.properties.source")
+    ) \
+    .withColumn("ingestion_time", current_timestamp())
+
+# Write to Bronze path, partitioned by event type and date
+query = df_parsed.writeStream \
+    .format("parquet") \
+    .option("checkpointLocation", f"{bronze_path}/_checkpoints/") \
+    .option("path", bronze_path) \
+    .partitionBy("event") \
+    .outputMode("append") \
+    .start()
+
+query.awaitTermination()
+
+
+
+================================================================================
+File: .\spark_home\spark\apps\bronze_ingestion.py
+================================================================================
+from pyspark.sql import SparkSession
+import sys
+import os
+
+def bronze_ingest(spark, jdbc_url, props, table, bronze_path, processing_date):
+    print(f"\n🔄 Starting Bronze Ingestion for table: {table}")
+
+    try:
+        # Read from MySQL using JDBC
+        df = spark.read.jdbc(url=jdbc_url, table=table, properties=props)
+
+        # Parse date from CLI
+        year, month, day = processing_date.split("-")
+
+        # Define HDFS/Local output path
+        output_path = os.path.join(bronze_path, "mysql", table, year, month, day)
+        print(f"📁 Writing output to: {output_path}")
+
+        # Write as Parquet
+        df.write.mode("overwrite").parquet(output_path)
+        print(f"✅ Successfully ingested '{table}' to Bronze at {output_path}\n")
+
+    except Exception as e:
+        print(f"❌ Error during ingestion: {e}")
+        raise
+
+if __name__ == "__main__":
+    if len(sys.argv) != 7:
+        print("\n❌ Usage: python bronze_ingestion.py <jdbc_url> <user> <password> <table> <bronze_path> <processing_date YYYY-MM-DD>\n")
+        sys.exit(1)
+
+    jdbc_url = sys.argv[1]
+    user = sys.argv[2]
+    pwd = sys.argv[3]
+    table_name = sys.argv[4]
+    bronze_path = sys.argv[5]
+    processing_date = sys.argv[6]  # Expects format: YYYY-MM-DD
+
+    spark = SparkSession.builder \
+        .appName(f"BronzeIngest_{table_name}") \
+        .getOrCreate()
+
+    conn_props = {
+        "user": user,
+        "password": pwd,
+        "driver": "com.mysql.cj.jdbc.Driver"
+    }
+
+    bronze_ingest(spark, jdbc_url, conn_props, table_name, bronze_path, processing_date)
+
+    spark.stop()
+
+
+
+================================================================================
+File: .\spark_home\spark\apps\gold_aggregation.py
+================================================================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum as _sum, count as _count, date_format, lit, max as _max, datediff, when
+from kafka import KafkaProducer
+import json
+from datetime import datetime
+import sys
+import os
+
+def create_product_performance_summary(spark, silver_base_path, gold_base_path, processing_date_str):
+    silver_orders_path = os.path.join(silver_base_path, f"orders_cleaned/processed_date={processing_date_str}")
+    gold_product_summary_path = os.path.join(gold_base_path, f"product_daily_performance/report_date={processing_date_str}")
+
+    print(f"\n🔍 Reading cleaned orders from: {silver_orders_path}")
+    try:
+        df_orders_silver = spark.read.parquet(silver_orders_path)
+
+        df_product_summary = (
+            df_orders_silver.groupBy(
+                col("product_id"),
+                date_format(col("order_date"), "yyyy-MM-dd").alias("sale_date")
+            )
+            .agg(
+                _count("order_id").alias("orders_count"),
+                _sum("total_price").alias("total_sales")
+            )
+            .withColumn("report_date", lit(processing_date_str))
+        )
+
+        print(f"📁 Writing product performance summary to: {gold_product_summary_path}")
+        df_product_summary.write.mode("overwrite").parquet(gold_product_summary_path)
+
+        print(f"✅ Successfully created product performance summary: {gold_product_summary_path}\n")
+        return df_product_summary.count()
+
+    except Exception as e:
+        print(f"❌ Error during gold aggregation: {e}")
+        raise
+
+def create_sales_daily_summary(spark, silver_base_path, gold_base_path, processing_date_str):
+    silver_orders_path = os.path.join(silver_base_path, f"orders_cleaned/processed_date={processing_date_str}")
+    gold_summary_path = os.path.join(gold_base_path, f"sales_daily_summary/report_date={processing_date_str}")
+
+    df_orders = spark.read.parquet(silver_orders_path)
+    df_summary = df_orders.groupBy("order_date").agg(
+        _count("order_id").alias("orders_count"),
+        _sum("total_price").alias("total_sales")
+    ).withColumn("report_date", lit(processing_date_str))
+
+    df_summary.write.mode("overwrite").parquet(gold_summary_path)
+
+def create_customer_segments(spark, silver_path, gold_path, processing_date):
+    df = spark.read.parquet(os.path.join(silver_path, f"orders_cleaned/processed_date={processing_date}"))
+
+    df_rfm = df.groupBy("customer_id").agg(
+        _max("order_date").alias("last_order_date"),
+        _count("order_id").alias("frequency"),
+        _sum("total_price").alias("monetary_value")
+    )
+
+    df_rfm = df_rfm.withColumn("recency_days", datediff(lit(processing_date), col("last_order_date")))
+
+    df_segmented = df_rfm.withColumn("segment", when(
+        (col("recency_days") <= 30) & (col("frequency") >= 5) & (col("monetary_value") >= 5000), "Platinum"
+    ).when(
+        (col("recency_days") <= 60) & (col("frequency") >= 3), "Gold"
+    ).when(
+        (col("recency_days") <= 90) & (col("frequency") >= 2), "Silver"
+    ).otherwise("Bronze"))
+
+    df_segmented = df_segmented.withColumn("report_date", lit(processing_date))
+
+    output_path = os.path.join(gold_path, f"customer_segments/report_date={processing_date}")
+    df_segmented.write.mode("overwrite").parquet(output_path)
+
+    return df_segmented.count()
+
+def send_kafka_event(record_count, processing_date):
+    producer = KafkaProducer(
+        bootstrap_servers="kafka:9092",
+        value_serializer=lambda v: json.dumps(v).encode("utf-8")
+    )
+
+    event = {
+        "user_id": "gold_batch_01",
+        "event": "gold_metrics_generated",
+        "properties": {
+            "metric_type": "daily_gold_batch",
+            "record_count": record_count,
+            "run_date": processing_date
+        }
+    }
+
+    producer.send("ecommerce_events", event)
+    producer.flush()
+    print(f"📤 Kafka Event Sent: {event}\n")
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("\n❌ Usage: python gold_aggregation.py <silver_base_path> <gold_base_path> <processing_date YYYY-MM-DD>\n")
+        sys.exit(1)
+
+    silver_path_arg = sys.argv[1]
+    gold_path_arg = sys.argv[2]
+    date_arg = sys.argv[3]
+
+    spark_session = SparkSession.builder.appName("GoldProductPerformance").getOrCreate()
+
+    count_1 = create_product_performance_summary(spark_session, silver_path_arg, gold_path_arg, date_arg)
+    create_sales_daily_summary(spark_session, silver_path_arg, gold_path_arg, date_arg)
+    count_2 = create_customer_segments(spark_session, silver_path_arg, gold_path_arg, date_arg)
+
+    total_records = count_1 + count_2
+    send_kafka_event(total_records, date_arg)
+
+    spark_session.stop()
+
+
+
+================================================================================
+File: .\spark_home\spark\apps\load_to_warehouse.py
+================================================================================
+from pyspark.sql import SparkSession
+import sys
+import os
+import traceback
+
+def load_gold_table_to_postgres(spark, gold_table_path, pg_jdbc_url, connection_properties, target_table_name):
+    """Loads a Gold Parquet table to a PostgreSQL table."""
+    print(f"\n[INFO] Reading Gold data from: {gold_table_path}")
+    try:
+        df_gold = spark.read.parquet(gold_table_path)
+
+        if df_gold.rdd.isEmpty():
+            print(f"[WARNING] Skipped {target_table_name} – DataFrame is empty.")
+            return
+
+        print(f"[INFO] Writing to PostgreSQL table: {target_table_name}")
+        df_gold.write \
+            .mode("overwrite") \
+            .jdbc(url=pg_jdbc_url, table=target_table_name, properties=connection_properties)
+
+        print(f"[SUCCESS] Loaded data to PostgreSQL: {target_table_name}")
+
+    except Exception as e:
+        print(f"[ERROR] Failed to load {target_table_name} from path {gold_table_path}: {str(e)}")
+        traceback.print_exc()
+        raise
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 6:
+        print("Usage: load_to_warehouse.py <gold_base_path> <pg_jdbc_url> <user> <password> <processing_date YYYY-MM-DD>")
+        sys.exit(1)
+
+    gold_base_path = sys.argv[1]      # e.g. /opt/data_lake/gold
+    pg_jdbc_url = sys.argv[2]
+    pg_user = sys.argv[3]
+    pg_password = sys.argv[4]
+    processing_date = sys.argv[5]
+
+    print(f"\n[INFO] Starting warehouse load for date: {processing_date}")
+    spark = SparkSession.builder.appName("LoadGoldToWarehouse").getOrCreate()
+
+    connection_props = {
+        "user": pg_user,
+        "password": pg_password,
+        "driver": "org.postgresql.Driver"
+    }
+
+    # Gold tables and their target PostgreSQL warehouse destinations
+    gold_targets = {
+        "product_daily_performance": "facts.fact_orders",
+        "sales_daily_summary": "facts.sales_summary",
+        "customer_segments": "dimensions.customer_segments"
+    }
+
+    for gold_folder, target_table in gold_targets.items():
+        full_gold_path = os.path.join(gold_base_path, f"{gold_folder}/report_date={processing_date}")
+        print(f"\n[INFO] Processing: {gold_folder} → {target_table}")
+        load_gold_table_to_postgres(
+            spark,
+            full_gold_path,
+            pg_jdbc_url,
+            connection_props,
+            target_table
+        )
+
+    print("\n[SUCCESS] All gold tables processed successfully.\n")
+    spark.stop()
+
+
+
+================================================================================
+File: .\spark_home\spark\apps\silver_processing.py
+================================================================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lower, trim, to_date, split, when, lit, round as spark_round
+from pyspark.sql.utils import AnalysisException
+import sys
+import os
+
+
+def process_customers_to_silver(spark, bronze_base_path, silver_base_path, processing_date_str):
+    """Cleans and transforms raw customers data to the Silver layer."""
+    year, month, day = processing_date_str.split('-')
+    raw_customers_path = os.path.join(bronze_base_path, "customers", year, month, day)
+    silver_customers_path = os.path.join(silver_base_path, f"customers_cleaned/processed_date={processing_date_str}")
+
+    print(f"\n👤 Processing customers from: {raw_customers_path}")
+    try:
+        df_customers = spark.read.parquet(raw_customers_path)
+
+        df_customers = df_customers.withColumn("name_parts", split(col("name"), " ")) \
+                                   .withColumn("first_name", lower(trim(col("name_parts").getItem(0)))) \
+                                   .withColumn("last_name", lower(trim(
+                                       when(col("name_parts").getItem(1).isNotNull(), col("name_parts").getItem(1))
+                                       .otherwise(lit("")))))
+
+        df_customers_cleaned = df_customers.withColumn("email", lower(trim(col("email")))) \
+                                           .withColumn("signup_date", to_date(col("created_at"), "yyyy-MM-dd")) \
+                                           .fillna({
+                                               "email": "unknown@example.com",
+                                               "signup_date": "2000-01-01"
+                                           })
+
+        df_customers_silver = df_customers_cleaned.select(
+            col("customer_id").cast("int"),
+            col("first_name"),
+            col("last_name"),
+            col("email"),
+            col("signup_date"),
+            col("address").cast("string")
+        )
+
+        df_customers_silver.write.mode("overwrite").parquet(silver_customers_path)
+        print(f"✅ Customers written to Silver: {silver_customers_path}")
+
+    except AnalysisException:
+        print(f"⚠️ No customers data found at: {raw_customers_path} — skipping.")
+    except Exception as e:
+        print(f"❌ Error processing customers: {e}")
+        raise
+
+
+def process_products_to_silver(spark, bronze_base_path, silver_base_path, processing_date_str):
+    year, month, day = processing_date_str.split('-')
+    raw_products_path = os.path.join(bronze_base_path, "products", year, month, day)
+    silver_products_path = os.path.join(silver_base_path, f"products_cleaned/processed_date={processing_date_str}")
+
+    print(f"\n📦 Processing products from: {raw_products_path}")
+    try:
+        df = spark.read.parquet(raw_products_path)
+
+        df_cleaned = df.filter(
+            (col("product_id").isNotNull()) &
+            (col("product_name").isNotNull()) &
+            (col("price") > 0) &
+            (col("stock_quantity") >= 0)
+        )
+
+        df_silver = df_cleaned.select(
+            col("product_id").cast("int"),
+            col("product_name"),
+            col("category"),
+            col("price").cast("double"),
+            col("stock_quantity").cast("int"),
+            to_date(col("created_at")).alias("created_date")
+        )
+
+        df_silver.write.mode("overwrite").parquet(silver_products_path)
+        print(f"✅ Products written to Silver: {silver_products_path}")
+
+    except AnalysisException:
+        print(f"⚠️ No products data found at: {raw_products_path} — skipping.")
+    except Exception as e:
+        print(f"❌ Error processing products: {e}")
+        raise
+
+
+def process_orders_to_silver(spark, bronze_base_path, silver_base_path, processing_date_str):
+    year, month, day = processing_date_str.split('-')
+    raw_orders_path = os.path.join(bronze_base_path, "orders", year, month, day)
+    silver_orders_path = os.path.join(silver_base_path, f"orders_cleaned/processed_date={processing_date_str}")
+    silver_customers_path = os.path.join(silver_base_path, f"customers_cleaned/processed_date={processing_date_str}")
+    silver_products_path = os.path.join(silver_base_path, f"products_cleaned/processed_date={processing_date_str}")
+
+    print(f"\n🧾 Processing orders from: {raw_orders_path}")
+    try:
+        orders_df = spark.read.parquet(raw_orders_path)
+        customers_df = spark.read.parquet(silver_customers_path)
+        products_df = spark.read.parquet(silver_products_path)
+
+        df = orders_df.join(customers_df.select("customer_id"), on="customer_id", how="inner") \
+                      .join(products_df.select("product_id", "price"), on="product_id", how="inner") \
+                      .filter(col("quantity") > 0)
+
+        df = df.withColumn("expected_price", spark_round(col("price") * col("quantity"), 2)) \
+               .withColumn("total_price", col("expected_price")) \
+               .drop("expected_price")
+
+        df_silver = df.select(
+            col("order_id").cast("int"),
+            col("customer_id").cast("int"),
+            col("product_id").cast("int"),
+            col("quantity").cast("int"),
+            col("total_price").cast("double"),
+            to_date(col("order_date")).alias("order_date")
+        )
+
+        df_silver.write.mode("overwrite").parquet(silver_orders_path)
+        print(f"✅ Orders written to Silver: {silver_orders_path}")
+
+    except AnalysisException:
+        print(f"⚠️ Missing orders or reference data. Skipping orders transformation.")
+    except Exception as e:
+        print(f"❌ Error processing orders: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("\n❌ Usage: python silver_processing.py <bronze_base_path> <silver_base_path> <processing_date YYYY-MM-DD>\n")
+        sys.exit(1)
+
+    bronze_path = sys.argv[1]   # Expects: /opt/ecommerce_data_lake/bronze/mysql
+    silver_path = sys.argv[2]   # Expects: /opt/ecommerce_data_lake/silver
+    processing_date = sys.argv[3]
+
+    spark = SparkSession.builder.appName("SilverProcessingEcommerce").getOrCreate()
+
+    process_customers_to_silver(spark, bronze_path, silver_path, processing_date)
+    process_products_to_silver(spark, bronze_path, silver_path, processing_date)
+    process_orders_to_silver(spark, bronze_path, silver_path, processing_date)
+
+    spark.stop()
+
+
+
+================================================================================
+File: .\spark_home\spark\apps\spark_streaming_kafka_to_bronze.py
+================================================================================
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col, year, month, dayofmonth
+from pyspark.sql.types import StructType, StringType, TimestampType
+
+# === Kafka Configuration ===
+KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
+KAFKA_TOPIC = "ecommerce_events"
+
+# === Output Bronze Path ===
+BRONZE_PATH = "/opt/ecommerce_data_lake/bronze/kafka_events"
+CHECKPOINT_PATH = f"{BRONZE_PATH}/_checkpoints"
+
+# === Define Event Schema (adjust if needed) ===
+event_schema = StructType() \
+    .add("event", StringType()) \
+    .add("user_id", StringType()) \
+    .add("timestamp", TimestampType()) \
+    .add("metric_type", StringType()) \
+    .add("record_count", StringType())
+
+if __name__ == "__main__":
+    spark = SparkSession.builder \
+        .appName("KafkaToBronzeStreaming") \
+        .config("spark.sql.shuffle.partitions", "2") \
+        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0") \
+        .getOrCreate()
+
+    spark.sparkContext.setLogLevel("WARN")
+
+    # === Read Kafka Stream ===
+    df_kafka_raw = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
+        .option("subscribe", KAFKA_TOPIC) \
+        .option("startingOffsets", "latest") \
+        .load()
+
+    # === Parse Kafka JSON Value ===
+    df_parsed = df_kafka_raw.selectExpr("CAST(value AS STRING) AS json_value") \
+        .select(from_json(col("json_value"), event_schema).alias("data")) \
+        .select("data.*") \
+        .withColumn("year", year("timestamp")) \
+        .withColumn("month", month("timestamp")) \
+        .withColumn("day", dayofmonth("timestamp"))
+
+    # === Write to Bronze Zone as Parquet Partitioned by Date ===
+    query = df_parsed.writeStream \
+        .format("parquet") \
+        .option("path", BRONZE_PATH) \
+        .option("checkpointLocation", CHECKPOINT_PATH) \
+        .partitionBy("event", "year", "month", "day") \
+        .outputMode("append") \
+        .trigger(processingTime="1 minute") \
+        .start()
+
+    query.awaitTermination()
+
+
+
