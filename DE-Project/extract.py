@@ -3,7 +3,7 @@ import os
 # Define extensions to include
 included_extensions = ['.py', '.yml', '.yaml', '.sql', '.sh', '.posthog']
 special_files = ['dockerfile']  # case-insensitive match
-excluded_dirs = {'project_venv', '__pycache__', '.git', 'node_modules', '.idea'}
+excluded_dirs = {'project_venv', '__pycache__', '.git', 'node_modules', '.idea','extract.py','all_paths.txt','path.py','airflow_logs'}
 
 output_file = 'project_code_dump_mi.txt'
 base_dir = '.'  # starting directory

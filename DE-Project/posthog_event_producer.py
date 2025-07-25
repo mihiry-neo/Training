@@ -2,13 +2,21 @@ import json
 import random
 import time
 import logging
+import os
 from datetime import datetime
 from kafka import KafkaProducer
 from kafka.errors import NoBrokersAvailable
+from dotenv import load_dotenv
 
-# === CONFIG ===
-KAFKA_TOPIC = "ecommerce_events"
-KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"  # Correct for Docker Compose networking
+# === Load .env for local use ===
+load_dotenv()
+
+# === CONFIG FROM ENV ===
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "ecommerce_events")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+
+if not KAFKA_BOOTSTRAP_SERVERS:
+    raise EnvironmentError("❌ KAFKA_BOOTSTRAP_SERVERS is not set in environment.")
 
 # === LOGGING ===
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

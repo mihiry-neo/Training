@@ -1,7 +1,13 @@
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
 
+# Load .env variables for local debugging (no effect inside container)
+load_dotenv()
+
+# === DAG DEFAULTS ===
 default_args = {
     'owner': 'airflow',
     'email_on_failure': False,
@@ -24,24 +30,27 @@ with DAG(
     bronze_customers = BashOperator(
         task_id='bronze_ingest_customers',
         bash_command="""
-            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar /opt/bitnami/spark/apps/bronze_ingestion.py \
-            jdbc:mysql://mysql_source:3306/ecommerce_db ecomuser ecompassword customers /opt/data_lake/bronze {{ ds }}
+            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar \
+            /opt/bitnami/spark/apps/bronze_ingestion.py \
+            customers /opt/data_lake/bronze {{ ds }}
         """
     )
 
     bronze_products = BashOperator(
         task_id='bronze_ingest_products',
         bash_command="""
-            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar /opt/bitnami/spark/apps/bronze_ingestion.py \
-            jdbc:mysql://mysql_source:3306/ecommerce_db ecomuser ecompassword products /opt/data_lake/bronze {{ ds }}
+            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar \
+            /opt/bitnami/spark/apps/bronze_ingestion.py \
+            products /opt/data_lake/bronze {{ ds }}
         """
     )
 
     bronze_orders = BashOperator(
         task_id='bronze_ingest_orders',
         bash_command="""
-            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar /opt/bitnami/spark/apps/bronze_ingestion.py \
-            jdbc:mysql://mysql_source:3306/ecommerce_db ecomuser ecompassword orders /opt/data_lake/bronze {{ ds }}
+            spark-submit --jars /opt/spark/jars/mysql-connector-java-8.0.28.jar \
+            /opt/bitnami/spark/apps/bronze_ingestion.py \
+            orders /opt/data_lake/bronze {{ ds }}
         """
     )
 
@@ -64,11 +73,10 @@ with DAG(
     load_to_warehouse = BashOperator(
         task_id='load_to_warehouse',
         bash_command="""
-            spark-submit --jars /opt/spark/jars/postgresql-42.7.3.jar /opt/bitnami/spark/apps/load_to_warehouse.py \
-            /opt/data_lake/gold jdbc:postgresql://postgres_dw:5432/airflow \
-            airflow airflow {{ ds }}
+            spark-submit --jars /opt/spark/jars/postgresql-42.7.3.jar \
+            /opt/bitnami/spark/apps/load_to_warehouse.py \
+            /opt/data_lake/gold {{ ds }}
         """
     )
-
 
     [bronze_orders, bronze_products, bronze_customers] >> silver_processing >> gold_aggregation >> load_to_warehouse

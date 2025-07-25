@@ -1,0 +1,2951 @@
+
+
+### FILE: auth.py ###
+
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def decode_token(token: str):
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
+
+### FILE: database.py ###
+
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL2 = os.getenv("DATABASE_URL2")
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# 🆕 Utility: get a new engine for any DB URL
+def create_engine_from_url(url: str):
+    return create_engine(url)
+
+
+### FILE: datagen.py ###
+
+from faker import Faker
+import random
+from sqlalchemy.orm import Session
+from Users.models import User
+from auth import get_password_hash
+from database import SessionLocal
+from typing import List, Dict, Any
+from Products.models import Product, Category, Inventory
+from Orders.models import Cart, CartItem, Order, OrderStatus
+from Products.crud import reserve_products, finalize_products
+from datetime import datetime, timezone, timedelta
+import sys, os
+from tqdm import tqdm
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+fake = Faker()
+
+class DataGenerator:
+    def __init__(self):
+        self.faker = Faker()
+        self.faker_unique = self.faker.unique
+        self.global_categories = [
+            "Fashion", "Electronics", "Home & Garden", "Food & Beverage",
+            "Health & Beauty", "Books & Media", "Toys & Games",
+            "Sports & Outdoors", "DIY & Hardware", "Furniture"
+        ]
+        self.category_subcategories = {
+            "Fashion": ["Clothing", "Footwear", "Accessories"],
+            "Electronics": ["Mobiles", "Laptops", "Appliances"],
+            "Home & Garden": ["Decor", "Plants", "Kitchen"],
+            "Food & Beverage": ["Snacks", "Drinks", "Groceries"],
+            "Health & Beauty": ["Skincare", "Supplements", "Makeup"],
+            "Books & Media": ["Books", "Magazines", "E-books"],
+            "Toys & Games": ["Board Games", "Action Figures", "Educational"],
+            "Sports & Outdoors": ["Fitness", "Cycling", "Camping"],
+            "DIY & Hardware": ["Tools", "Paint", "Electrical"],
+            "Furniture": ["Bedroom", "Office", "Living Room"]
+        }
+        self.brand_names = [
+            "Astra", "Zenex", "Nova", "UrbanMode", "GearPro",
+            "CraftHaus", "NextEra", "Skyline", "PureEssence", "Flytek"
+        ]
+
+    def generate_random_users(self, count: int = 10, db: Session = SessionLocal()):
+        genders = ["Male", "Female", "Other"]
+        created = 0
+
+        try:
+            for _ in range(count):
+                email = fake.unique.email()
+                if db.query(User).filter_by(email=email).first():
+                    continue
+
+                new_user = User(
+                    username=fake.user_name(),
+                    email=email,
+                    password=get_password_hash("StrongPassword123!"),
+                    gender=random.choice(genders),
+                    age=random.randint(18, 65),
+                    phone_number=fake.phone_number()[:20],
+                    nationality=fake.country(),
+                    is_active=True
+                )
+                db.add(new_user)
+                created += 1
+
+            db.commit()
+            print(f"✅ Created {created} random users directly in DB.")
+            return created
+        except Exception as e:
+            db.rollback()
+            print(f"❌ Error creating users: {e}")
+            return 0
+
+    def create_categories(self, db: Session) -> List[Category]:
+        existing = db.query(Category).all()
+        if existing:
+            print("Categories already exist. Skipping creation.")
+            return existing
+
+        categories = []
+        try:
+            for main_name in self.global_categories:
+                main_cat = Category(name=main_name, parent_id=None)
+                db.add(main_cat)
+                db.flush()
+                categories.append(main_cat)
+
+                for sub in self.category_subcategories.get(main_name, []):
+                    sub_cat = Category(name=f"{main_name} - {sub}", parent_id=main_cat.category_id)
+                    db.add(sub_cat)
+                    db.flush()
+                    categories.append(sub_cat)
+
+            db.commit()
+            print(f"✅ Created {len(categories)} categories.")
+            return categories
+        except Exception as e:
+            db.rollback()
+            print(f"❌ Error creating categories: {e}")
+            return []
+
+    def generate_brand(self) -> str:
+        return random.choice([
+            random.choice(self.brand_names),
+            f"{self.faker.last_name()} {random.choice(['Inc', 'Corp', 'Ltd', 'Group'])}",
+            f"{self.faker.country_code()} Tech",
+            f"{self.faker.word().capitalize()}Works"
+        ])
+
+    def generate_product_attributes(self, category_name: str) -> Dict[str, Any]:
+        return {
+            "color": self.faker.color_name(),
+            "weight": (
+                f"{random.uniform(0.2, 3.0):.2f} kg"
+                if "Electronics" in category_name or "Toys" in category_name
+                else f"{random.uniform(5.0, 50.0):.2f} kg"
+                if "Furniture" in category_name
+                else f"{random.uniform(0.5, 10.0):.2f} kg"
+            ),
+            "material": (
+                random.choice(["Cotton", "Polyester", "Denim", "Wool", "Silk"])
+                if "Fashion" in category_name
+                else random.choice(["Wood", "Metal", "Glass", "Plastic", "Leather"])
+                if "Furniture" in category_name
+                else random.choice(["Plastic", "Aluminum", "Glass"])
+            ),
+            "rating": round(random.uniform(3.0, 5.0), 1)
+        }
+
+    
+
+    def create_products(self, db: Session, categories: List[Category], count: int) -> List[Product]:
+        products = []
+        inventories = []
+        batch_size = 100
+        categories_with_expiry = {"Food & Beverage", "Health & Beauty"}
+        used_names = set()
+
+        try:
+            # Set up tqdm progress bar
+            with tqdm(total=count, desc="📦 Generating Products", unit="prod", ncols=100) as pbar:
+                for i in range(count):
+                    category = random.choice(categories)
+
+                    for _ in range(10):
+                        try:
+                            name = f"{self.faker_unique.word().capitalize()} {self.faker_unique.word().capitalize()}"
+                        except Exception:
+                            name = f"{self.faker.word().capitalize()} {self.faker.word().capitalize()}"
+                        if name not in used_names and not db.query(Product).filter_by(name=name).first():
+                            used_names.add(name)
+                            break
+                    else:
+                        continue
+
+                    price = round(
+                        random.uniform(200.0, 2000.0)
+                        if "Electronics" in category.name or "Furniture" in category.name
+                        else random.uniform(50.0, 500.0)
+                        if "Fashion" in category.name
+                        else random.uniform(10.0, 300.0),
+                        2
+                    )
+
+                    product = Product(
+                        name=name,
+                        price=price,
+                        category_id=category.category_id,
+                        brand=self.generate_brand(),
+                        attributes=self.generate_product_attributes(category.name),
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc)
+                    )
+                    db.add(product)
+                    db.flush()
+
+                    expiry_date = (
+                        datetime.now() + timedelta(days=random.randint(30, 365))
+                        if category.name in categories_with_expiry else datetime(9999, 12, 31)
+                    )
+
+                    inventory = Inventory(
+                        product_id=product.product_id,
+                        quantity_available=random.randint(0, 1000),
+                        quantity_reserve=random.randint(0, 50),
+                        reorder_level=random.randint(5, 25),
+                        reorder_quantity=random.randint(20, 100),
+                        unit_cost=round(price * random.uniform(0.4, 0.7), 2),
+                        last_restocked=datetime.now() - timedelta(days=random.randint(1, 30)),
+                        expiry_date=expiry_date,
+                        batch_number=self.faker.uuid4(),
+                        location=self.faker.city()
+                    )
+
+                    db.add(inventory)
+                    db.commit()
+
+                    products.append(product)
+
+                    # Commit in batches
+                    if (i + 1) % batch_size == 0:
+                        db.bulk_save_objects(inventories)
+                        db.commit()
+                        inventories.clear()
+                        pbar.update(batch_size)  # ✅ Progress update
+
+                # Final batch commit
+                if inventories:
+                    db.bulk_save_objects(inventories)
+                    db.commit()
+                    pbar.update(len(inventories))
+
+            print(f"✅ Final commit: {len(products)} products created.")
+            return products
+
+        except Exception as e:
+            db.rollback()
+            print(f"❌ Error creating products: {e}")
+            return []
+
+
+    def create_carts_and_orders(self, db: Session, users: list[User], products: list[Product], num_orders: int = 100):
+        created_orders = 0
+
+        for _ in range(num_orders):
+            user = random.choice(users)
+            cart = Cart(user_id=user.user_id, created_at=utc_now())
+            db.add(cart)
+            db.flush()
+
+            selected_products = random.sample(products, k=min(random.randint(1, 5), len(products)))
+            order_items = []
+            total_amount = 0.0
+            failed = False
+
+            for product in selected_products:
+                quantity = random.randint(1, 3)
+
+                if not reserve_products(db, product_id=product.product_id, quantity=quantity):
+                    failed = True
+                    break
+
+                cart_item = CartItem(
+                    cart_id=cart.cart_id,
+                    product_id=product.product_id,
+                    quantity=quantity
+                )
+                db.add(cart_item)
+
+                order_items.append({
+                    "product_id": product.product_id,
+                    "name": product.name,
+                    "qty": quantity,
+                    "price": float(product.price)
+                })
+                total_amount += float(product.price) * quantity
+
+            if failed or not order_items:
+                db.rollback()
+                continue
+
+            order = Order(
+                user_id=user.user_id,
+                order_date=utc_now(),
+                items=order_items,
+                total_amount=round(total_amount, 2),
+                status=OrderStatus.pending,
+                payment_method=random.choice(["credit_card", "paypal", "stripe"]),
+                shipping_address=fake.address()
+            )
+            db.add(order)
+
+            finalize_products(db, order)
+            created_orders += 1
+
+        db.commit()
+        print(f"✅ Created {created_orders} valid orders.")
+        return created_orders
+
+
+### FILE: docker-compose.yml ###
+
+version: "3.8"
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ecommerce-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: ecommerce_db
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - ecommerce-net
+
+  backend:
+    build: .
+    container_name: ecommerce-fastapi
+    depends_on:
+      - db
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    networks:
+      - ecommerce-net
+
+volumes:
+  mysql_data:
+
+networks:
+  ecommerce-net:
+    driver: bridge
+
+
+### FILE: Dockerfile ###
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y gcc default-libmysqlclient-dev && apt-get clean
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Convert Windows line endings in Python scripts (esp. if created on Windows)
+RUN find . -type f -name "*.py" -exec sed -i 's/\r$//' {} \;
+
+# Add a startup script inline (no external sh files)
+CMD bash -c '\
+  echo "⏳ Waiting for MySQL to be ready..." && \
+  until python -c "import pymysql; \
+    import os; \
+    pymysql.connect( \
+      host=os.getenv(\"DB_HOST\", \"db\"), \
+      user=os.getenv(\"MYSQL_USER\"), \
+      password=os.getenv(\"MYSQL_PASSWORD\"), \
+      database=os.getenv(\"MYSQL_DATABASE\") \
+    )"; do \
+    echo "❌ DB not ready yet... retrying in 2s"; \
+    sleep 2; \
+  done && \
+  echo "✅ DB is up. Seeding data..." && \
+  python genusers.py && \
+  python genpro.py && \
+  python genorders.py && \
+  echo "🚀 Starting Uvicorn..." && \
+  uvicorn main:app --host 0.0.0.0 --port 8000'
+
+
+### FILE: etl_incremental.py ###
+
+import os
+import sys
+from dotenv import load_dotenv
+from datetime import datetime, timezone
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import func
+from Products.models import Product, Inventory, Category, StockMovement
+
+
+# Ensure models and base are importable
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
+
+# 👇 Fix for relationship dependency
+from Orders.models import Order  # Required because StockMovement uses relationship("Order")
+from Products.models import Product, Inventory
+
+# Load both DB connections from one .env file
+load_dotenv()
+
+def load_session(env_var: str):
+    url = os.getenv(env_var)
+    if not url:
+        raise ValueError(f"{env_var} is not set in .env file")
+    engine = create_engine(url)
+    Session = sessionmaker(bind=engine)
+    return engine, Session()
+
+# ✅ Correctly labeled
+client_engine, client_db = load_session("DATABASE_URL")
+warehouse_engine, warehouse_db = load_session("DATABASE_URL2")
+
+
+def get_all_warehouse_products(db):
+    return {
+        p.product_id: (p.updated_at or datetime.min.replace(tzinfo=timezone.utc))
+        for p in db.query(Product.product_id, Product.updated_at).all()
+    }
+
+def sync_categories():
+    print("📁 Syncing categories...")
+
+    client_categories = client_db.query(Category).all()
+    existing_category_ids = {c.category_id for c in warehouse_db.query(Category.category_id).all()}
+
+    new_categories = []
+    for cat in client_categories:
+        if cat.category_id not in existing_category_ids:
+            new_cat = Category(
+                category_id=cat.category_id,
+                name=cat.name,
+                parent_id=cat.parent_id,
+                created_at=cat.created_at,
+                updated_at=cat.updated_at
+            )
+            new_categories.append(new_cat)
+
+    if new_categories:
+        warehouse_db.add_all(new_categories)
+        warehouse_db.commit()
+        print(f"✅ Synced {len(new_categories)} new categories.")
+    else:
+        print("✅ No new categories to sync.")
+
+def sync_products():
+    try:
+        
+        print("🔁 Starting incremental sync (new + updated)...")
+        sync_categories()
+        warehouse_products = get_all_warehouse_products(warehouse_db)
+
+        updated_or_new = client_db.query(Product).filter(
+            Product.updated_at != None,
+            Product.updated_at > datetime.min.replace(tzinfo=timezone.utc)
+        ).all()
+
+
+        inserted, updated = 0, 0
+
+        for client_product in updated_or_new:
+            warehouse_updated_at = warehouse_products.get(client_product.product_id)
+
+            if not warehouse_updated_at:
+                action = "insert"
+            elif client_product.updated_at and client_product.updated_at > warehouse_updated_at:
+                action = "update"
+            else:
+                continue
+
+            if action == "insert":
+                new_product = Product(
+                    product_id=client_product.product_id,
+                    name=client_product.name,
+                    price=client_product.price,
+                    category_id=client_product.category_id,
+                    brand=client_product.brand,
+                    attributes=client_product.attributes,
+                    created_at=client_product.created_at,
+                    updated_at=client_product.updated_at
+                )
+                warehouse_db.add(new_product)
+
+                if client_product.inventory:
+                    new_inventory = Inventory(
+                        product_id=client_product.product_id,
+                        quantity_available=client_product.inventory.quantity_available,
+                        quantity_reserve=client_product.inventory.quantity_reserve,
+                        reorder_level=client_product.inventory.reorder_level,
+                        reorder_quantity=client_product.inventory.reorder_quantity,
+                        unit_cost=client_product.inventory.unit_cost,
+                        last_restocked=client_product.inventory.last_restocked,
+                        expiry_date=client_product.inventory.expiry_date,
+                        batch_number=client_product.inventory.batch_number,
+                        location=client_product.inventory.location
+                    )
+                    warehouse_db.add(new_inventory)
+
+                inserted += 1
+
+            elif action == "update":
+                warehouse_product = warehouse_db.query(Product).get(client_product.product_id)
+                if warehouse_product:
+                    if client_product.price != warehouse_product.price:
+                        from Products.models import PriceHistory
+
+                        price_history = PriceHistory(
+                            product_id=client_product.product_id,
+                            old_price=warehouse_product.price,
+                            new_price=client_product.price,
+                            changed_at=datetime.now(timezone.utc),
+                            reason="Synced from client DB"
+                        )
+                        warehouse_db.add(price_history)
+
+                    warehouse_product.name = client_product.name
+                    warehouse_product.price = client_product.price
+                    warehouse_product.category_id = client_product.category_id
+                    warehouse_product.brand = client_product.brand
+                    warehouse_product.attributes = client_product.attributes
+                    warehouse_product.updated_at = client_product.updated_at
+
+                    if client_product.inventory:
+                        inv = warehouse_db.query(Inventory).filter_by(product_id=client_product.product_id).first()
+                        if inv:
+                            inv.quantity_available = client_product.inventory.quantity_available
+                            inv.quantity_reserve = client_product.inventory.quantity_reserve
+                            inv.reorder_level = client_product.inventory.reorder_level
+                            inv.reorder_quantity = client_product.inventory.reorder_quantity
+                            inv.unit_cost = client_product.inventory.unit_cost
+                            inv.last_restocked = client_product.inventory.last_restocked
+                            inv.expiry_date = client_product.inventory.expiry_date
+                            inv.batch_number = client_product.inventory.batch_number
+                            inv.location = client_product.inventory.location
+
+                    updated += 1
+
+        warehouse_db.commit()
+        print(f"✅ Sync complete: {inserted} inserted, {updated} updated.")
+
+        sync_stock_movements()
+
+    except Exception as e:
+        warehouse_db.rollback()
+        print(f"❌ Sync failed: {e}")
+
+    finally:
+        client_db.close()
+        warehouse_db.close()
+    
+
+def sync_stock_movements():
+    print("📦 Syncing stock movements...")
+
+    latest_synced = warehouse_db.query(func.max(StockMovement.timestamp)).scalar()
+    if not latest_synced:
+        latest_synced = datetime.min.replace(tzinfo=timezone.utc)
+
+    new_movements = client_db.query(StockMovement).filter(
+        StockMovement.timestamp > latest_synced
+    ).all()
+
+    print(f"🕒 Found {len(new_movements)} new stock movements since {latest_synced}.")
+
+    for sm in new_movements:
+        movement = StockMovement(
+            stock_id=sm.stock_id,  # Optional: can omit if autoincrement
+            product_id=sm.product_id,
+            change=sm.change,
+            reason=sm.reason,
+            timestamp=sm.timestamp,
+            cart_id=sm.cart_id,
+            order_id=sm.order_id
+        )
+        warehouse_db.add(movement)
+
+    warehouse_db.commit()
+    print(f"✅ Synced {len(new_movements)} stock movements.")
+
+if __name__ == "__main__":
+    sync_products()
+
+
+### FILE: etl_users.py ###
+
+# etl_users.py
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
+load_dotenv()
+SOURCE_DB = os.getenv("DATABASE_URL")      # client
+DEST_DB = os.getenv("DATABASE_URL2")       # warehouse
+
+source_engine = create_engine(SOURCE_DB)
+dest_engine = create_engine(DEST_DB)
+
+SourceSession = sessionmaker(bind=source_engine)
+DestSession = sessionmaker(bind=dest_engine)
+
+TABLE_NAME = "users"
+TRACK_COLUMN = "user_id"
+
+def get_existing_user_ids(session):
+    result = session.execute(text(f"SELECT {TRACK_COLUMN} FROM {TABLE_NAME}"))
+    return {row[0] for row in result.fetchall()}
+
+def incremental_upsert_users():
+    source_session = SourceSession()
+    dest_session = DestSession()
+
+    try:
+        print("👤 Syncing users...")
+
+        existing_ids = get_existing_user_ids(dest_session)
+        print(f"📦 Found {len(existing_ids)} existing users in warehouse.")
+
+        # 🧠 Fetch only new users if any
+        if existing_ids:
+            id_list = ", ".join(map(str, existing_ids))
+            query = text(f"""
+                SELECT * FROM {TABLE_NAME}
+                WHERE {TRACK_COLUMN} NOT IN ({id_list})
+            """)
+        else:
+            query = text(f"SELECT * FROM {TABLE_NAME}")
+
+        rows = source_session.execute(query).fetchall()
+
+        if not rows:
+            print("✅ No new users to insert.")
+            return
+
+        # 🔁 Upsert logic
+        columns = list(rows[0]._mapping.keys())
+        placeholders = ", ".join([f":{col}" for col in columns])
+        update_clause = ", ".join([
+            f"{col} = VALUES({col})" for col in columns if col != TRACK_COLUMN
+        ])
+
+        insert_sql = text(f"""
+            INSERT INTO {TABLE_NAME} ({', '.join(columns)})
+            VALUES ({placeholders})
+            ON DUPLICATE KEY UPDATE {update_clause}
+        """)
+
+        for row in rows:
+            dest_session.execute(insert_sql, dict(row._mapping))
+
+        dest_session.commit()
+        print(f"✅ Upserted {len(rows)} new users.")
+
+    except Exception as e:
+        dest_session.rollback()
+        print(f"❌ Error syncing users: {e}")
+    finally:
+        source_session.close()
+        dest_session.close()
+
+if __name__ == "__main__":
+    incremental_upsert_users()
+
+
+### FILE: extract.py ###
+
+import os
+
+def extract_project_files(project_dir, output_file):
+    allowed_extensions = {'.py', '.yml'}
+    allowed_filenames = {'Dockerfile', 'docker-compose.yml'}
+
+    with open(output_file, 'w', encoding='utf-8') as outfile:
+        for root, _, files in os.walk(project_dir):
+            for file in files:
+                file_ext = os.path.splitext(file)[1]
+                if file_ext in allowed_extensions or file in allowed_filenames:
+                    file_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(file_path, project_dir)
+                    outfile.write(f"\n\n### FILE: {rel_path} ###\n\n")
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as infile:
+                            outfile.write(infile.read())
+                    except Exception as e:
+                        outfile.write(f"# Could not read {rel_path}: {e}\n")
+
+# Usage
+project_directory = '.'  # Or full path to your ecommerce_api folder
+output_txt = 'ecommerce_project_code.txt'
+extract_project_files(project_directory, output_txt)
+print(f"✅ All code and configs extracted to {output_txt}")
+
+
+### FILE: genorders.py ###
+
+import random
+from datetime import datetime
+from faker import Faker
+ 
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+ 
+from main import app
+from database import SessionLocal
+from Users.models import User
+from Products.models import Product, Inventory
+from Products.crud import reserve_products, finalize_products
+ 
+fake = Faker()
+client = TestClient(app)
+ 
+# Config
+NUM_CARTS_TO_CREATE = 200
+NUM_ORDERS_TO_GENERATE = 200
+ 
+used_product_ids = set()
+created_cart_ids = []
+ 
+def get_random_users(db: Session, limit=50):
+    return db.query(User).filter(User.is_active == True).limit(limit).all()
+ 
+def get_products_with_stock(db: Session):
+    return (
+        db.query(Product)
+        .join(Inventory)
+        .filter(Inventory.quantity_available > 0)
+        .all()
+    )
+ 
+def create_cart(db: Session, user_id: int):
+    response = client.post("/cart/", json={"user_id": user_id})
+    if response.status_code == 201:
+        cart_id = response.json()["cart_id"]
+        created_cart_ids.append(cart_id)
+        return cart_id
+    return None
+ 
+def create_cart_items(db: Session, user_id: int, cart_id: int, max_items=5):
+    products = get_products_with_stock(db)
+    items = []
+    count = 0
+    for product in products:
+        if product.product_id in used_product_ids:
+            continue
+        qty = min(5, product.inventory.quantity_available)
+        if qty <= 0:
+            continue
+        item = {
+            "user_id": user_id,
+            "product_id": product.product_id,
+            "quantity": random.randint(1, qty),
+            "price": float(product.price),
+            "cart_id": cart_id
+        }
+        items.append(item)
+        used_product_ids.add(product.product_id)
+        count += 1
+        if count >= max_items:
+            break
+ 
+    # Call reserve directly (not via client.post)
+    reserve_products(reservations=items, cart_id=cart_id, db=db)
+ 
+    return items
+ 
+def create_order_from_products(db: Session, user_id: int, products: list):
+    items = []
+    for product in products:
+        if product.inventory.quantity_available <= 0:
+            continue
+        qty = random.randint(1, min(5, product.inventory.quantity_available))
+        items.append({
+            "product_id": product.product_id,
+            "quantity": qty,
+            "price": float(product.price)
+        })
+ 
+    if not items:
+        print(f"No valid products for user {user_id}")
+        return
+ 
+    # Reserve first
+    reserve_products(reservations=items, db=db)
+ 
+    payload = {
+        "user_id": user_id,
+        "items": items,
+        "payment_method": random.choice(["Credit Card", "PayPal", "Cash"]),
+        "shipping_address": fake.address().replace("\n", ", ")
+    }
+ 
+    order_resp = client.post("/orders/", json=payload)
+    if order_resp.status_code in [200, 201]:
+        order_data = order_resp.json()
+        order_id = order_data.get("order_id")
+ 
+        try:
+            finalize_products(reservations=items, order_id=order_id, db=db)
+            print(f"Order created and finalized for user {user_id}")
+        except Exception as e:
+            print(f"Finalize failed: {e}")
+    else:
+        print(f"Order failed: {order_resp.json()}")
+ 
+def main():
+    db = SessionLocal()
+    try:
+        users = get_random_users(db)
+        if not users:
+            print("No users found.")
+            return
+ 
+        products = get_products_with_stock(db)
+        if not products:
+            print("No products with stock.")
+            return
+ 
+        print(f"Creating {NUM_CARTS_TO_CREATE} carts...")
+        for i in range(NUM_CARTS_TO_CREATE):
+            user = random.choice(users)
+            cart_id = create_cart(db, user.user_id)
+            if not cart_id:
+                continue
+            num_items = random.randint(1, 5)
+            create_cart_items(db, user.user_id, cart_id, max_items=num_items)
+            print(f"Cart {cart_id} created for user {user.user_id} with {num_items} items.")
+ 
+        print(f"\nGenerating {NUM_ORDERS_TO_GENERATE} orders...")
+        for _ in range(NUM_ORDERS_TO_GENERATE):
+            user = random.choice(users)
+            products = [
+                p for p in get_products_with_stock(db)
+                if p.product_id not in used_product_ids
+            ]
+            if len(products) < 3:
+                break
+            selected = random.sample(products, min(5, len(products)))
+            create_order_from_products(db, user.user_id, selected)
+ 
+        print("Script execution complete.")
+        print("Created cart IDs:", created_cart_ids)
+ 
+    finally:
+        db.close()
+ 
+if __name__ == "__main__":
+    main()
+ 
+ 
+
+### FILE: genpro.py ###
+
+import time
+from dotenv import load_dotenv
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from datagen import DataGenerator
+from database import Base
+import sys
+
+# Load .env variables
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not set in .env file")
+
+# Setup DB session
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base.metadata.create_all(bind=engine)
+
+def main(product_count: int = 1500):
+    db = SessionLocal()
+    generator = DataGenerator()
+
+    print("🚀 Generating categories...")
+    categories = generator.create_categories(db)
+    if not categories:
+        print("❌ Failed to generate categories. Aborting product generation.")
+        return
+
+    print(f"🚀 Generating {product_count} products...")
+    start = time.time()
+    products = generator.create_products(db, categories, product_count)
+    duration = time.time() - start
+
+    print(f"✅ Successfully generated {len(products)} products.")
+    print(f"🕒 Total time: {duration:.2f} seconds")
+    print(f"📦 Avg time per product: {(duration / len(products)):.4f} seconds" if products else "No products generated")
+
+if __name__ == "__main__":
+    main(product_count=1000)
+
+### FILE: genusers.py ###
+
+import os, random
+from dotenv import load_dotenv
+from faker import Faker
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from Users.models import User
+from sqlalchemy import insert
+ 
+load_dotenv()
+fake = Faker()
+ 
+GENDERS = ["male", "female", "other"]
+NATIONALITIES = ["Indian", "American", "British", "German", "French", "Japanese", "Canadian"]
+ 
+def generate_user_dict():
+    suffix = random.randint(1, 99999)
+    local, domain = fake.unique.email().split("@")
+    raw_phone = fake.phone_number()
+    phone = raw_phone[:50]  
+    return {
+        "username": fake.user_name(),
+        "email": f"{local}{suffix}@{domain}",
+        "password": fake.password(length=10),  
+        "gender": random.choice(GENDERS),
+        "age": random.randint(18, 65),
+        "phone_number": phone,
+        "nationality": random.choice(NATIONALITIES),
+        "is_active": random.choice([True, False])
+    }
+ 
+def filter_batch(batch):
+    seen_u, seen_e = set(), set()
+    unique = []
+    for r in batch:
+        if r["username"] in seen_u or r["email"] in seen_e:
+            continue
+        seen_u.add(r["username"])
+        seen_e.add(r["email"])
+        unique.append(r)
+    return unique
+ 
+def main(total=1000, chunk_size=100):
+    db: Session = SessionLocal()
+    count = 0
+    for i in range(0, total, chunk_size):
+        batch = [generate_user_dict() for _ in range(min(chunk_size, total - i))]
+        batch = filter_batch(batch)
+        if not batch:
+            continue
+        try:
+            stmt = insert(User.__table__).prefix_with("IGNORE")
+            db.execute(stmt, batch)
+            db.commit()
+            count += len(batch)
+            if count % 1000 == 0:
+                print(f"✅ Inserted {count}/{total} users")
+        except Exception as e:
+            db.rollback()
+            print(f"❌ Error inserting batch starting at {i + 1}: {e}")
+    db.close()
+    print(f"🎉 Completed inserting {count}/{total} users")
+ 
+if __name__ == "__main__":
+    main()
+
+### FILE: main.py ###
+
+from fastapi import FastAPI, Depends
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+import sys, os
+
+# Path setup
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Load env vars
+load_dotenv()
+
+# DB and Routers
+from database import engine, Base, get_db, create_engine_from_url
+from Products.routes import router as products_router
+from Orders.routes import order_router, cart_router
+from Users.routes import router as users_router
+
+# Models & Generator
+from datagen import DataGenerator
+from Users.models import User
+from Products.models import Product, Category
+from sqlalchemy.exc import SQLAlchemyError
+
+print("🧩 Tables detected:", list(Base.metadata.tables.keys()))
+Base.metadata.create_all(bind=engine)
+print("Warehouse DB tables created.")
+
+# Create client DB tables if not already present
+client_url = os.getenv("DATABASE_URL2")
+if client_url:
+    try:
+        client_engine = create_engine_from_url(client_url)
+        Base.metadata.create_all(bind=client_engine)
+        print("Client DB tables created (if not existing).")
+    except SQLAlchemyError as e:
+        print(f"Failed to create client DB tables: {e}")
+else:
+    print("DATABASE_URL2 (client) not set in .env")
+
+# App setup
+generator = DataGenerator()
+app = FastAPI(description="FastAPI E-commerce Project")
+
+# Routers
+app.include_router(users_router, prefix="/users", tags=["Users"])
+app.include_router(products_router, tags=["Products"])
+app.include_router(order_router, tags=["Orders"])
+app.include_router(cart_router, tags=["Cart"])
+
+
+### FILE: utils.py ###
+
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError
+from sqlalchemy.orm import Session
+from auth import decode_token
+from Users.crud import get_user_by_email
+from database import get_db
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token")
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = decode_token(token)
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = get_user_by_email(db, email)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+
+### FILE: Orders\crud.py ###
+
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from typing import List, Optional
+from decimal import Decimal
+
+from Orders.models import Cart, CartItem, Order, OrderStatus
+from Orders.schemas import (
+    CartCreate,
+    CartItemCreate,
+    OrderCreate,
+    CartItemResponse,
+    CartResponse
+)
+from Products import crud as Products_crud
+
+
+# ---------------------- CART OPERATIONS ----------------------
+def create_cart(db: Session, cart_in: CartCreate) -> Cart:
+    cart = Cart(user_id=cart_in.user_id)
+    db.add(cart)
+    db.commit()
+    db.refresh(cart)
+    return cart
+
+def get_cart(db: Session, cart_id: int) -> CartResponse:
+    cart = db.query(Cart).filter_by(cart_id=cart_id).first()
+    if not cart:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Cart {cart_id} not found")
+
+    enriched_items = []
+    for item in cart.items:
+        inventory = Products_crud.get_inventory_by_product_id(db, item.product_id)
+        product = Products_crud.get_product_by_id(db, item.product_id)
+
+        enriched_items.append(CartItemResponse(
+            item_id=item.item_id,
+            product_id=item.product_id,
+            quantity=item.quantity,
+            remaining_available=inventory.quantity_available if inventory else None,
+            unit_price=item.price,
+            total_price=round(item.quantity * item.price, 2),
+            product_name=product.name if product else None
+        ))
+
+    return CartResponse(
+        cart_id=cart.cart_id,
+        user_id=cart.user_id,
+        created_at=cart.created_at,
+        items=enriched_items
+    )
+
+def get_user_cart(user_id: int) -> List[CartItem]:
+    from database import SessionLocal
+    db = SessionLocal()
+    cart = db.query(Cart).filter_by(user_id=user_id).first()
+    if not cart:
+        return []
+    return cart.items
+
+def get_user_orders(db: Session, user_id: int) -> List[Order]:
+    return db.query(Order).filter_by(user_id=user_id).all()
+
+def add_item(db: Session, cart_id: int, item_in: CartItemCreate) -> CartItemResponse:
+    reservation_response = Products_crud.reserve_products(
+        reservations={
+            "product_id": item_in.product_id,
+            "quantity": item_in.quantity,
+            "cart_id": cart_id
+        },
+        cart_id=f"cart_{cart_id}",
+        db=db
+    )
+
+    item = db.query(CartItem).filter_by(cart_id=cart_id, product_id=item_in.product_id).first()
+    if item:
+        item.quantity += item_in.quantity
+    else:
+        product = Products_crud.get_product_by_id(db, item_in.product_id)
+        if not product:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
+
+        item = CartItem(
+            cart_id=cart_id,
+            user_id=item_in.user_id,
+            product_id=item_in.product_id,
+            quantity=item_in.quantity,
+            price=product.price
+        )
+        db.add(item)
+
+    db.commit()
+    db.refresh(item)
+
+    remaining_info = next(
+        (r for r in reservation_response.get("reserved_items", []) if r["product_id"] == item.product_id),
+        None
+    )
+    item.remaining_available = remaining_info.get("remaining_available") if remaining_info else None
+
+    return CartItemResponse(
+        item_id=item.item_id,
+        product_id=item.product_id,
+        quantity=item.quantity,
+        unit_price=item.price,
+        total_price=round(item.quantity * item.price, 2)
+    )
+
+def list_cart_items(db: Session, cart_id: int) -> List[CartItemResponse]:
+    cart = db.query(Cart).filter_by(cart_id=cart_id).first()
+    if not cart:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Cart {cart_id} not found")
+
+    enriched_items = []
+    for item in cart.items:
+        inventory = Products_crud.get_inventory_by_product_id(db, item.product_id)
+        product = Products_crud.get_product_by_id(db, item.product_id)
+
+        enriched_items.append(CartItemResponse(
+            item_id=item.item_id,
+            product_id=item.product_id,
+            quantity=item.quantity,
+            remaining_available=inventory.quantity_available if inventory else None,
+            unit_price=item.price,
+            total_price=round(item.quantity * item.price, 2),
+            product_name=product.name if product else None
+        ))
+
+    return enriched_items
+
+
+def update_item_quantity(db: Session, cart_id: int, product_id: int, quantity: int) -> CartItemResponse:
+    if quantity < 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Quantity must be >= 0")
+
+    item = db.query(CartItem).filter_by(cart_id=cart_id, product_id=product_id).first()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Item not found in cart")
+
+    quantity_diff = quantity - item.quantity
+    cart_key = f"cart_{cart_id}"
+
+    if quantity_diff > 0:
+        Products_crud.reserve_products(
+            reservations={"product_id": product_id, "quantity": quantity_diff, "cart_id": cart_id},
+            cart_id=cart_key,
+            db=db
+        )
+    elif quantity_diff < 0:
+        Products_crud.release_products(
+            reservations={"product_id": product_id, "quantity": abs(quantity_diff), "cart_id": cart_id},
+            cart_id=cart_key,
+            db=db
+        )
+
+    if quantity == 0:
+        db.delete(item)
+        db.commit()
+        raise HTTPException(status.HTTP_200_OK, detail="Item removed from cart")
+
+    item.quantity = quantity
+    db.commit()
+    db.refresh(item)
+
+    return CartItemResponse(
+        item_id=item.item_id,
+        product_id=item.product_id,
+        quantity=item.quantity,
+        unit_price=item.price,
+        total_price=round(item.quantity * item.price, 2)
+    )
+
+def remove_item(db: Session, item_id: int):
+    item = db.query(CartItem).filter_by(item_id=item_id).first()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cart item not found")
+
+    Products_crud.release_products(
+        reservations={
+            "product_id": item.product_id,
+            "quantity": item.quantity,
+            "cart_id": item.cart_id
+        },
+        cart_id=f"cart_{item.cart_id}",
+        db=db
+    )
+
+    db.delete(item)
+    db.commit()
+
+def clear_cart(db: Session, cart_id: int):
+    items = db.query(CartItem).filter_by(cart_id=cart_id).all()
+
+    for item in items:
+        Products_crud.release_products(
+            reservations={
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "cart_id": cart_id
+            },
+            cart_id=cart_id,
+            db=db
+        )
+        db.delete(item)
+
+    cart = db.query(Cart).filter_by(cart_id=cart_id).first()
+    if cart:
+        db.delete(cart)
+
+    db.commit()
+
+
+# ---------------------- ORDER OPERATIONS ----------------------
+def create_order(db: Session, order_in: OrderCreate) -> Order:
+    order_items_with_price = []
+    total = Decimal("0.0")
+
+    for item in order_in.items:
+        product = Products_crud.get_product_by_id(db, item.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+
+        price = product.price
+        total += item.quantity * price
+
+        order_items_with_price.append({
+            "product_id": item.product_id,
+            "quantity": item.quantity,
+            "price": float(price)
+        })
+
+    db_order = Order(
+        user_id=order_in.user_id,
+        items=order_items_with_price,
+        total_amount=total,
+        payment_method=order_in.payment_method,
+        shipping_address=order_in.shipping_address
+    )
+
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+
+    try:
+        reservations = [
+            {
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+            }
+            for item in order_in.items
+        ]
+        Products_crud.finalize_products(
+            reservations=reservations,
+            order_id=str(db_order.order_id),
+            db=db
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Order created but stock finalization failed: {str(e)}")
+
+    return db_order
+
+def get_order(db: Session, order_id: int) -> Order:
+    order = db.query(Order).get(order_id)
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order {order_id} not found")
+    return order
+
+def list_orders(db: Session) -> List[Order]:
+    return db.query(Order).all()
+
+def update_order_status(db: Session, order_id: int, status_str: str) -> Order:
+    order = get_order(db, order_id)
+    try:
+        order.status = OrderStatus(status_str)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status: {status_str}")
+    db.commit()
+    db.refresh(order)
+    return order
+
+def cancel_order(db: Session, order_id: int):
+    order = get_order(db, order_id)
+    if order.status == OrderStatus.canceled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Order already cancelled")
+
+    order.status = OrderStatus.canceled
+
+    try:
+        reservations = [
+            {
+                "product_id": item.get("product_id"),
+                "quantity": item.get("quantity", 0),
+                "order_id": order_id
+            }
+            for item in order.items
+        ]
+        Products_crud.release_products(
+            reservations=reservations,
+            cart_id=None,
+            order_id=order_id,
+            db=db
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Order cancelled but releasing stock failed: {str(e)}")
+
+    db.commit()
+
+
+### FILE: Orders\models.py ###
+
+import enum
+from sqlalchemy import JSON, Column, Enum, Integer, Float, String, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
+from database import Base
+from datetime import datetime, timezone
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+class OrderStatus(enum.Enum):
+    pending = "pending"
+    shipped = "shipped"
+    delivered = "delivered"
+    canceled = "canceled"
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    order_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    order_date = Column(DateTime, default=utc_now, nullable=False)
+    items = Column(JSON, nullable=False)  
+    total_amount = Column(Float, nullable=False)
+    status = Column(Enum(OrderStatus), default=OrderStatus.pending, nullable=False)
+    payment_method = Column(String(50), nullable=True)
+    shipping_address = Column(String(255), nullable=False)
+
+class CartItem(Base):
+    __tablename__ = "cart_items"
+    item_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    product_id = Column(Integer, ForeignKey("products.product_id"))
+    quantity = Column(Integer, nullable=False)
+    price = Column(Float, nullable=False)
+    cart_id = Column(Integer, ForeignKey("carts.cart_id"), nullable=False)
+
+    cart = relationship("Cart", back_populates="items")
+
+class Cart(Base):
+    __tablename__ = "carts"
+
+    cart_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now)
+
+    items = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
+
+### FILE: Orders\routes.py ###
+
+from fastapi import APIRouter, Depends, status, HTTPException
+from sqlalchemy.orm import Session
+from database import get_db
+import Orders.crud, Orders.schemas
+from utils import get_current_user
+
+# ------------------- CART ROUTER -------------------
+cart_router = APIRouter(prefix="/cart")
+
+@cart_router.post("/", response_model=Orders.schemas.CartResponse, status_code=status.HTTP_201_CREATED)
+def create_cart(cart_in: Orders.schemas.CartCreate, db: Session = Depends(get_db)):
+    return Orders.crud.create_cart(db, cart_in)
+
+
+@cart_router.get("/{cart_id}/details", response_model=Orders.schemas.CartResponse)
+def get_cart(cart_id: int, db: Session = Depends(get_db)):
+    return Orders.crud.get_cart(db, cart_id)
+
+
+@cart_router.post("/{cart_id}/items", response_model=Orders.schemas.CartItemResponse)
+def add_item_to_cart(cart_id: int, item_in: Orders.schemas.CartItemCreate, db: Session = Depends(get_db)):
+    return Orders.crud.add_item(db, cart_id, item_in)
+
+
+@cart_router.get("/{cart_id}/items", response_model=list[Orders.schemas.CartItemResponse])
+def list_items(cart_id: int, db: Session = Depends(get_db)):
+    return Orders.crud.list_cart_items(db, cart_id)
+
+
+@cart_router.put("/{cart_id}/items/{product_id}", response_model=Orders.schemas.CartItemResponse)
+def update_item(cart_id: int, product_id: int, quantity: int, db: Session = Depends(get_db)):
+    return Orders.crud.update_item_quantity(db, cart_id, product_id, quantity)
+
+
+@cart_router.delete("/{cart_id}/items/{item_id}", status_code=status.HTTP_200_OK)
+def remove_item(cart_id: int, item_id: int, db: Session = Depends(get_db)):
+    Orders.crud.remove_item(db, item_id)
+    return {"message": "Item removed and stock released."}
+
+
+@cart_router.delete("/{cart_id}/clear", status_code=status.HTTP_200_OK)
+def clear_cart(cart_id: int, db: Session = Depends(get_db)):
+    Orders.crud.clear_cart(db, cart_id)
+    return {"message": "Cart cleared and stock released."}
+
+
+# ------------------- ORDER ROUTER -------------------
+order_router = APIRouter(prefix="/orders", tags=["Orders"])
+
+
+@order_router.post("/", response_model=Orders.schemas.OrderResponse, status_code=status.HTTP_201_CREATED)
+def create_order(order_in: Orders.schemas.OrderCreate, db: Session = Depends(get_db)):
+    return Orders.crud.create_order(db, order_in)
+
+
+@order_router.get("/{order_id}", response_model=Orders.schemas.OrderResponse)
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    return Orders.crud.get_order(db, order_id)
+
+
+@order_router.get("/", response_model=list[Orders.schemas.OrderResponse])
+def list_orders(db: Session = Depends(get_db)):
+    return Orders.crud.list_orders(db)
+
+
+@order_router.patch("/{order_id}/status", response_model=Orders.schemas.OrderResponse)
+def update_order_status(order_id: int, status_in: Orders.schemas.OrderStatusUpdate, db: Session = Depends(get_db)):
+    return Orders.crud.update_order_status(db, order_id, status_in.status)
+
+
+@order_router.delete("/{order_id}", response_model=Orders.schemas.OrderCancelResponse)
+def cancel_order(order_id: int, db: Session = Depends(get_db)):
+    Orders.crud.cancel_order(db, order_id)
+    return {"detail": f"Order {order_id} canceled and reserved inventory released."}
+
+
+### FILE: Orders\schemas.py ###
+
+from pydantic import BaseModel, PositiveInt
+from typing import List, Optional
+from datetime import datetime
+ 
+# ---------------------- CART ITEM ----------------------
+ 
+class CartItemCreate(BaseModel):
+    user_id: PositiveInt
+    product_id: PositiveInt
+    quantity: PositiveInt
+ 
+ 
+class CartItemResponse(BaseModel):
+    item_id: int
+    product_id: int
+    quantity: int
+    unit_price: float
+    total_price: float
+ 
+    class Config:
+        from_attributes = True
+ 
+# ---------------------- CART ----------------------
+ 
+class CartCreate(BaseModel):
+    user_id: PositiveInt
+ 
+class CartResponse(CartCreate):
+    cart_id: int
+    created_at: datetime
+    items: List[CartItemResponse] = []
+ 
+    class Config:
+        from_attributes = True
+ 
+# ---------------------- ORDER ITEM ----------------------
+ 
+class OrderItem(BaseModel):
+    product_id: PositiveInt
+    quantity: PositiveInt
+ 
+# ---------------------- ORDER ----------------------
+ 
+class OrderCreate(BaseModel):
+    user_id: PositiveInt
+    cart_id: Optional[int] = None
+    items: List[OrderItem]
+    shipping_address: str
+    payment_method: str
+ 
+class OrderResponse(BaseModel):
+    order_id: int
+    user_id: int
+    total_amount: float
+    status: str
+    order_date: datetime
+    shipping_address: str
+    payment_method: str
+ 
+    class Config:
+        from_attributes = True
+ 
+class OrderStatusUpdate(BaseModel):
+    status: str
+ 
+class OrderCancelResponse(BaseModel):
+    detail: str
+
+### FILE: Orders\__init__.py ###
+
+
+
+### FILE: Products\crud.py ###
+
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, func, desc, asc
+from fastapi import Depends, HTTPException
+from sqlalchemy.orm import joinedload
+from typing import Tuple, Dict, Any, Optional, List, Union
+from database import get_db
+import Products.models, Products.schemas
+from Products.models import Product, PriceHistory, StockMovement
+from decimal import Decimal, ROUND_HALF_UP
+import random
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+def create_product_manual(db: Session, product: Products.schemas.ProductCreate):
+    try:
+        db_product = Products.models.Product(**product.model_dump(exclude={"inventory"}))
+        db.add(db_product)
+        db.flush()
+
+        if product.inventory:
+            db_inventory = Products.models.Inventory(
+                product_id=db_product.product_id,
+                **product.inventory.model_dump()
+            )
+            db.add(db_inventory)
+
+        db.commit()
+        db.refresh(db_product)
+        return db_product
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating manual product with inventory: {e}")
+        raise
+
+
+def get_all_products(db: Session):
+    return db.query(Products.models.Product).all()
+
+def get_product_by_id(db: Session, id: int):
+    return db.query(Products.models.Product).filter(Products.models.Product.product_id == id).first()
+
+def get_product_by_name(db: Session, name: str):
+    return db.query(Products.models.Product).filter(Products.models.Product.name == name).first()
+
+def get_product_by_brand(db: Session, brand: str):
+    return db.query(Products.models.Product).filter(Products.models.Product.brand == brand).first()
+
+def get_products_by_category(db: Session, category_id: int):
+    return db.query(Products.models.Product).filter(Products.models.Product.category_id == category_id).all()
+
+def get_all_categories(db: Session):
+    return db.query(Products.models.Category).all()
+
+def get_paginated_products(
+    db: Session, 
+    skip: int, 
+    limit: int, 
+    search: Optional[str] = None,
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
+    filters: Optional[Dict[str, Any]] = None
+) -> Tuple[int, List[Products.models.Product]]:
+    try:
+        query = db.query(Products.models.Product)\
+                 .options(joinedload(Products.models.Product.category),
+                          joinedload(Products.models.Product.inventory)) 
+
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Products.models.Product.name.ilike(search_term),
+                    Products.models.Product.brand.ilike(search_term),
+                    Products.models.Product.product_id == search if search.isdigit() else False  # NEW
+                )
+            )
+
+        
+        if filters:
+            if filters.get('min_price') is not None:
+                query = query.filter(Products.models.Product.price >= filters['min_price'])
+            if filters.get('max_price') is not None:
+                query = query.filter(Products.models.Product.price <= filters['max_price'])
+            if filters.get('category_id') is not None:
+                query = query.filter(Products.models.Product.category_id == filters['category_id'])
+            if filters.get('in_stock_only'):
+                query = query.join(Products.models.Inventory)\
+                             .filter(Products.models.Inventory.quantity_available > 0)
+
+        total = query.count()
+
+        if hasattr(Products.models.Product, sort_by):
+            sort_column = getattr(Products.models.Product, sort_by)
+            query = query.order_by(desc(sort_column) if sort_dir == "desc" else asc(sort_column))
+
+        products = query.offset(skip).limit(limit).all()
+        return total, products
+    except Exception as e:
+        raise
+
+def update_product(db: Session, product_id: int, product_update: Products.schemas.ProductUpdate):
+    db_product = db.query(Products.models.Product).filter(Products.models.Product.product_id == product_id).first()
+    
+    if not db_product:
+        db_product = db.query(Products.models.Product).filter(Products.models.Product.name == str(product_id)).first()
+    
+    if not db_product:
+        db_product = db.query(Products.models.Product).filter(Products.models.Product.brand == str(product_id)).first()
+    
+    if not db_product:
+        return None
+    
+    update_data = product_update.model_dump(exclude_unset=True)
+    
+    if 'attributes' in update_data:
+        new_attributes = update_data.pop('attributes')
+        if new_attributes is not None:
+            existing_attributes = db_product.attributes or {}
+            if isinstance(new_attributes, dict) and new_attributes:
+                merged_attributes = dict(existing_attributes)
+                merged_attributes.update(new_attributes)
+                db_product.attributes = merged_attributes
+            elif new_attributes == {}:
+                db_product.attributes = {}
+                
+    for field, value in update_data.items():
+        if hasattr(db_product, field):
+            setattr(db_product, field, value)
+    
+    try:
+        db.commit()
+        db.refresh(db_product)
+        return db_product
+    except Exception as e:
+        db.rollback()
+        raise e
+
+def get_inventory_by_product_id(db: Session, product_id: int):
+    return db.query(Products.models.Inventory).filter(Products.models.Inventory.product_id == product_id).first()
+
+def update_inventory_quantity(db: Session, product_id: int, quantity_delta: int, reason: str = None, order_id: int = None):
+    inventory = get_inventory_by_product_id(db, product_id)
+    if not inventory:
+        raise Exception("Inventory record not found for product_id")
+
+    inventory.quantity_available += quantity_delta
+    inventory.quantity_available = max(0, inventory.quantity_available)
+
+    movement = Products.models.StockMovement(
+        product_id=product_id,
+        order_id=order_id,
+        change=quantity_delta,
+        reason=reason
+    )
+    db.add(movement)
+    db.commit()
+    db.refresh(inventory)
+    return inventory
+
+def create_or_update_inventory(db: Session, product_id: int, data: Products.schemas.InventoryBase):
+    inventory = get_inventory_by_product_id(db, product_id)
+    if not inventory:
+        inventory = Products.models.Inventory(product_id=product_id, **data.model_dump())
+        db.add(inventory)
+    else:
+        for key, value in data.model_dump().items():
+            setattr(inventory, key, value)
+    db.commit()
+    db.refresh(inventory)
+    return inventory
+
+def get_stock_movements_for_product(db: Session, product_id: int):
+    return db.query(Products.models.StockMovement)\
+        .filter(Products.models.StockMovement.product_id == product_id)\
+        .order_by(Products.models.StockMovement.timestamp.desc()).all()
+
+def update_inventory_settings(db: Session, product_id: int, update_data: Products.schemas.InventoryUpdate):
+    inventory = db.query(Products.models.Inventory).filter(Products.models.Inventory.product_id == product_id).first()
+    if not inventory:
+        raise Exception("Inventory not found")
+
+    for key, value in update_data.model_dump(exclude_unset=True).items():
+        setattr(inventory, key, value)
+
+    db.commit()
+    db.refresh(inventory)
+    return inventory
+
+def generate_recommendations(limit: int, db: Session) -> List[dict]:
+    affordable = db.query(Products.models.Product)\
+        .join(Products.models.Inventory)\
+        .filter(
+            Products.models.Inventory.quantity_available > 0,
+            Products.models.Product.price < 300,
+            Products.models.Product.attributes["rating"].as_float() >= 3
+        )\
+        .order_by(func.random())\
+        .limit(limit // 2).all()
+
+    premium = db.query(Products.models.Product)\
+        .join(Products.models.Inventory)\
+        .filter(
+            Products.models.Inventory.quantity_available > 0,
+            Products.models.Product.price > 1500,
+            Products.models.Product.attributes["rating"].as_float() >= 3
+        )\
+        .order_by(func.random())\
+        .limit(limit - len(affordable)).all()
+
+    combined = affordable + premium
+    random.shuffle(combined)
+
+    return [
+        {
+            "id": p.product_id,
+            "name": p.name,
+            "price": float(p.price),
+            "brand": p.brand,
+            "category_name": p.category.name if p.category else "Unknown",
+            "rating": p.attributes.get("rating") if p.attributes else None,
+            "stock_quantity": p.inventory.quantity_available if p.inventory else 0
+        }
+        for p in combined
+    ]
+
+
+def reserve_products(
+    reservations: Union[List[dict], dict],
+    cart_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    if isinstance(reservations, dict):
+        reservations = [reservations]
+
+    try:
+        reserved_items = []
+
+        for item in reservations:
+            inventory = Products.crud.get_inventory_by_product_id(db, item["product_id"])
+            if not inventory or inventory.quantity_available < item["quantity"]:
+                db.rollback()
+                raise HTTPException(
+                    status_code=206,
+                    detail=f"Insufficient stock for product {item['product_id']} (requested: {item['quantity']}, available: {inventory.quantity_available if inventory else 0})"
+                )
+
+        for item in reservations:
+            inventory = Products.crud.get_inventory_by_product_id(db, item["product_id"])
+            inventory.quantity_available -= item["quantity"]
+            inventory.quantity_reserve += item["quantity"]
+
+            movement = Products.models.StockMovement(
+                product_id=item["product_id"],
+                cart_id=item.get("cart_id", cart_id),
+                change=-item["quantity"],
+                reason=f"reserve_cart_{item.get('cart_id', cart_id)}"
+            )
+            db.add(movement)
+
+            reserved_items.append({
+                **item,
+                "remaining_available": inventory.quantity_available
+            })
+
+        db.commit()
+
+        return {
+            "success": True,
+            "reserved_items": reserved_items,
+            "total_items": len(reserved_items),
+            "cart_id": cart_id,
+            "message": f"Successfully reserved {len(reserved_items)} product(s)"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=206, detail=str(e))
+
+def release_products(
+    reservations: Union[List[dict], dict],
+    cart_id: Optional[int] = None,
+    order_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    if isinstance(reservations, dict):
+        reservations = [reservations]
+
+    try:
+        released_items = []
+
+        for item in reservations:
+            product_id = item["product_id"]
+            quantity = item["quantity"]
+
+            inventory = Products.crud.get_inventory_by_product_id(db, product_id)
+            if inventory and inventory.quantity_reserve >= quantity:
+                inventory.quantity_reserve -= quantity
+                inventory.quantity_available += quantity
+
+                movement_cart_id = item.get("cart_id") if isinstance(item.get("cart_id"), int) else cart_id
+                movement_order_id = item.get("order_id") if isinstance(item.get("order_id"), int) else order_id
+
+                reason_parts = ["release"]
+                if movement_cart_id is not None:
+                    reason_parts.append(f"cart_{movement_cart_id}")
+                if movement_order_id is not None:
+                    reason_parts.append(f"order_{movement_order_id}")
+                reason = "_".join(reason_parts)
+
+                movement = Products.models.StockMovement(
+                    product_id=product_id,
+                    cart_id=movement_cart_id,
+                    order_id=movement_order_id,
+                    change=quantity,
+                    reason=reason
+                )
+                db.add(movement)
+
+                released_items.append({
+                    **item,
+                    "new_available": inventory.quantity_available
+                })
+
+        db.commit()
+        return {
+            "success": True,
+            "released_items": released_items,
+            "total_items": len(released_items),
+            "cart_id": cart_id,
+            "order_id": order_id,
+            "message": f"Successfully released {len(released_items)} product(s)"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=206, detail=str(e))
+
+
+def finalize_products(
+    reservations: Union[List[dict], dict],
+    order_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    if isinstance(reservations, dict):
+        reservations = [reservations]
+
+    try:
+        finalized_items = []
+
+        for item in reservations:
+            product_id = item["product_id"]
+            quantity = item["quantity"]
+
+            inventory = Products.crud.get_inventory_by_product_id(db, product_id)
+            if not inventory:
+                raise HTTPException(status_code=206, detail=f"Inventory not found for product {product_id}")
+
+            print(
+                f"[DEBUG][BEFORE] Product {product_id} -> "
+                f"Available: {inventory.quantity_available}, Reserved: {inventory.quantity_reserve}"
+            )
+
+            if inventory.quantity_reserve < quantity:
+                raise HTTPException(
+                    status_code=206,
+                    detail=f"Not enough reserved stock for product {product_id}"
+                )
+
+            if inventory.quantity_available < quantity:
+                raise HTTPException(
+                    status_code=206,
+                    detail=f"Not enough available stock for product {product_id}"
+                )
+
+            inventory.quantity_reserve -= quantity
+            inventory.quantity_available -= quantity
+            db.add(inventory)
+
+            movement = Products.models.StockMovement(
+                product_id=product_id,
+                order_id=item.get("order_id", order_id),
+                cart_id=item.get("cart_id"),
+                change=-quantity,
+                reason=f"finalize_order_{item.get('order_id', order_id)}"
+            )
+            db.add(movement)
+
+            print(
+                f"[DEBUG][AFTER] Product {product_id} -> "
+                f"Available: {inventory.quantity_available}, Reserved: {inventory.quantity_reserve}"
+            )
+
+            finalized_items.append({
+                **item,
+                "remaining_reserved": inventory.quantity_reserve,
+                "remaining_stock": inventory.quantity_available
+            })
+
+        db.flush()
+        db.commit()
+
+        return {
+            "success": True,
+            "finalized_items": finalized_items,
+            "total_items": len(finalized_items),
+            "order_id": order_id,
+            "message": f"Successfully finalized {len(finalized_items)} product(s)"
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=206, detail=f"Finalization failed: {str(e)}")
+
+
+def randomly_update_prices(
+    db: Session,
+    products: List[Product],
+    batch_size: int = 50,
+    reason: str = "auto_scheduler"
+) -> None:
+    try:
+        selected = random.sample(products, min(batch_size, len(products)))
+
+        for product in selected:
+            old_price = product.price
+            change_percent = Decimal(str(random.uniform(-0.2, 0.2)))
+            new_price = (old_price * (Decimal("1.0") + change_percent)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            new_price = max(new_price, Decimal("1.00"))
+
+            product.price = new_price
+            db.add(product)
+
+            price_history = PriceHistory(
+                product_id=product.product_id,
+                old_price=old_price,
+                new_price=new_price,
+                reason=reason
+            )
+            db.add(price_history)
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
+
+
+def log_stock_movement(
+    db: Session,
+    product_id: int,
+    change: int,
+    reason: str,
+    order_id: Optional[int] = None,
+    cart_id: Optional[int] = None
+):
+    try:
+        movement = StockMovement(
+            product_id=product_id,
+            change=change,
+            reason=reason,
+            order_id=order_id,
+            cart_id=cart_id
+        )
+        db.add(movement)
+        db.commit()
+        print(f"[STOCK LOGGED] Product {product_id} | Change: {change} | Reason: {reason}")
+        return movement
+    except Exception as e:
+        db.rollback()
+        print(f"[STOCK LOGGING ERROR] Failed to log stock movement for product {product_id}: {e}")
+        return None
+
+
+
+### FILE: Products\models.py ###
+
+from sqlalchemy import Column, Integer, String, ForeignKey, JSON, DateTime, Numeric
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from database import Base
+from datetime import datetime, timezone
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+class Category(Base):
+    __tablename__ = "categories"
+    
+    category_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey('categories.category_id'), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    parent = relationship("Category", remote_side=[category_id], back_populates="children")
+    children = relationship("Category", back_populates="parent", cascade="all, delete-orphan")
+    products = relationship("Product", back_populates="category", cascade="all, delete-orphan")
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    product_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, index=True)
+    price = Column(Numeric(10, 2), nullable=False, index=True)
+    brand = Column(String(100), index=True)
+    attributes = Column(JSON, nullable=True)
+    category_id = Column(Integer, ForeignKey('categories.category_id'), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=utc_now)
+
+    category = relationship("Category", back_populates="products")
+    price_history = relationship("PriceHistory", back_populates="product", cascade="all, delete-orphan")
+    inventory = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
+    stock_movements = relationship("StockMovement", back_populates="product", passive_deletes=True)
+
+
+class PriceHistory(Base):
+    __tablename__ = "product_history"
+
+    ph_id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    old_price = Column(Numeric(10, 2), nullable=False)
+    new_price = Column(Numeric(10, 2), nullable=False)
+    changed_at = Column(DateTime, default=utc_now)
+    reason = Column(String(100), nullable=True)
+
+    product = relationship("Product", back_populates="price_history")
+
+class Inventory(Base):
+    __tablename__ = "inventory"
+
+    inv_id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False, unique=True)
+    quantity_available = Column(Integer, default=0)
+    quantity_reserve = Column(Integer, default=0)
+    reorder_level = Column(Integer, default=10)
+    reorder_quantity = Column(Integer, default=20)
+    unit_cost = Column(Numeric(10, 2), nullable=True)
+    last_restocked = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
+    batch_number = Column(String(100), nullable=True)
+    location = Column(String(100), nullable=True)
+    last_updated = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    product = relationship("Product", back_populates="inventory")
+
+class StockMovement(Base):
+    __tablename__ = "stock_movements"
+
+    stock_id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.product_id", ondelete="SET NULL"), nullable=True)
+    change = Column(Integer, nullable=False)
+    reason = Column(String(255), nullable=True)
+    timestamp = Column(DateTime, default=utc_now)
+
+    cart_id = Column(Integer, ForeignKey("carts.cart_id"), nullable=True)
+    order_id = Column(Integer, ForeignKey("orders.order_id"), nullable=True)
+
+    product = relationship("Product", back_populates="stock_movements")
+    order = relationship("Order", backref="stock_movements")
+    cart = relationship("Cart", backref="stock_movements")
+
+
+
+
+
+
+
+### FILE: Products\routes.py ###
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func
+from sqlalchemy.orm import Session
+from typing import List, Optional, Union
+from Orders.models import CartItem
+import Products.schemas, Products.crud
+from database import get_db
+from datagen import DataGenerator
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+router = APIRouter(prefix="/products", tags=["Products"])
+generator = DataGenerator()
+
+@router.post("/", response_model=Products.schemas.Product)
+def create_product(product: Products.schemas.ProductCreate, db: Session = Depends(get_db)):
+    return Products.crud.create_product_manual(db, product)
+
+@router.get("/", response_model=Products.schemas.ProductListResponse)
+def get_all_products(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search products"),
+    sort_by: str = Query("created_at", description="Sort by field"),
+    sort_dir: str = Query("desc", regex="^(asc|desc)$", description="Sort direction"),
+    min_price: Optional[float] = Query(None, ge=0, description="Minimum price"),
+    max_price: Optional[float] = Query(None, ge=0, description="Maximum price"),
+    category_id: Optional[int] = Query(None, description="Filter by category"),
+    in_stock_only: bool = Query(False, description="Show only in-stock items")
+):
+    skip = (page - 1) * per_page
+    filters = {
+        'min_price': min_price,
+        'max_price': max_price,
+        'category_id': category_id,
+        'in_stock_only': in_stock_only
+    }
+    
+    total, products = Products.crud.get_paginated_products(
+        db, skip, per_page, search, sort_by, sort_dir, filters
+    )
+    
+    clean_products = []
+    for product in products:
+        rating = None
+        if product.attributes and 'rating' in product.attributes:
+            rating = product.attributes['rating']
+        
+        clean_products.append({
+            "product_id": product.product_id,
+            "name": product.name,
+            "price": product.price,
+            "brand": product.brand,
+            "stock_quantity": product.inventory.quantity_available if product.inventory else 0,
+            "category_name": product.category.name if product.category else "Unknown",
+            "rating": rating
+        })
+    
+    total_pages = (total + per_page - 1) // per_page
+    
+    return {
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "products": clean_products
+    }
+
+@router.get("/{product_id}", response_model=Products.schemas.Product)
+def get_product_by_id(product_id: int, db: Session = Depends(get_db)):
+    product = Products.crud.get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+@router.post("/auto-generate", response_model=List[Products.schemas.Product])
+def auto_generate_products(count: int = 1, db: Session = Depends(get_db)):
+    categories = Products.crud.get_all_categories(db)
+    return generator.create_products(db, categories, count)
+
+@router.post("/update-prices")
+def update_all_prices(
+    count: int = Query(50, ge=1, le=500, description="Number of products to update"),
+    db: Session = Depends(get_db)
+):
+    products = Products.crud.get_all_products(db)
+    if not products:
+        return {"message": "No products found to update"}
+    Products.crud.randomly_update_prices(db, products, batch_size=count)
+    return {"message": f"Price updated for {min(count, len(products))} products"}
+
+@router.patch("/{product_id}", response_model=Products.schemas.Product)
+def update_product(
+    product_id: str, 
+    product_update: Products.schemas.ProductUpdate,
+    db: Session = Depends(get_db)
+):
+    product = None
+    if product_id.isdigit():
+        product = Products.crud.get_product_by_id(db, int(product_id))
+    if not product:
+        product = Products.crud.get_product_by_name(db, product_id)
+    if not product:
+        product = Products.crud.get_product_by_brand(db, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if product_update.category_id is not None:
+        valid_category_ids = [cat.category_id for cat in Products.crud.get_all_categories(db)]
+        if product_update.category_id not in valid_category_ids:
+            raise HTTPException(status_code=400, detail="Invalid category_id")
+
+    updated_product = Products.crud.update_product(db, product.product_id, product_update)
+    return updated_product
+
+@router.get("/{product_id}/inventory", response_model=Products.schemas.Inventory)
+def get_product_inventory(product_id: int, db: Session = Depends(get_db)):
+    inventory = Products.crud.get_inventory_by_product_id(db, product_id)
+    if not inventory:
+        raise HTTPException(status_code=404, detail="Inventory not found")
+    return inventory
+
+@router.patch("/{product_id}/inventory")
+def adjust_inventory(
+    product_id: int,
+    quantity_delta: int,
+    reason: str = "manual adjustment",
+    order_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        updated_inventory = Products.crud.update_inventory_quantity(
+            db, product_id, quantity_delta, reason, order_id
+        )
+        return {
+            "message": f"Inventory updated for Product ID {product_id}",
+            "new_quantity": updated_inventory.quantity_available
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/{product_id}/stock-movements", response_model=List[Products.schemas.StockMovement])
+def get_stock_movements(product_id: int, db: Session = Depends(get_db)):
+    return Products.crud.get_stock_movements_for_product(db, product_id)
+
+@router.patch("/{product_id}/inventory/settings", response_model=Products.schemas.Inventory)
+def update_inventory_settings(
+    product_id: int,
+    inventory_update: Products.schemas.InventoryUpdate,
+    db: Session = Depends(get_db)
+):
+    try:
+        updated_inventory = Products.crud.update_inventory_settings(
+            db=db,
+            product_id=product_id,
+            update_data=inventory_update
+        )
+        return updated_inventory
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/{product_id}")
+def delete_product_and_inventory(
+    product_id: int,
+    reason: str = "Product deleted manually",
+    db: Session = Depends(get_db)
+):
+    product = Products.crud.get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # ✅ Save inventory reference early
+    inventory = product.inventory
+
+    # Step 0: Delete any cart items using this product
+    cart_items = db.query(CartItem).filter_by(product_id=product_id).all()
+    for item in cart_items:
+        db.delete(item)
+
+    # Step 1: Log movement BEFORE deletion
+    if inventory:
+        qty = inventory.quantity_available or 0
+        if qty != 0:
+            Products.crud.log_stock_movement(
+                db=db,
+                product_id=product_id,
+                change=-qty,
+                reason=reason
+            )
+
+    # Step 2: Delete inventory and product
+    if inventory:
+        db.delete(inventory)
+
+    db.delete(product)
+    db.commit()
+
+    return {"message": f"Product ID {product_id} deleted, inventory removed, and stock movement recorded."}
+
+@router.post("/incremental-load")
+def incremental_load_products(
+    count: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db)
+):
+    categories = Products.crud.get_all_categories(db)
+    new_products = generator.create_products(db, categories, count)
+    return {"message": f"{len(new_products)} new products added incrementally."}
+
+
+### FILE: Products\schemas.py ###
+
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+
+# =========================================================
+# 🗂️ CATEGORY SCHEMAS
+# =========================================================
+
+class CategoryBase(BaseModel):
+    name: str
+    parent_id: Optional[int] = None
+
+class Category(CategoryBase):
+    category_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    children: List['Category'] = []
+
+    class Config:
+        from_attributes = True
+
+Category.model_rebuild()
+
+# =========================================================
+# 🧮 INVENTORY SCHEMAS
+# =========================================================
+
+class InventoryBase(BaseModel):
+    quantity_available: int = 0
+    quantity_reserve: int = 0
+    reorder_level: Optional[int] = 10
+    reorder_quantity: Optional[int] = 20
+    unit_cost: Optional[float] = None
+    last_restocked: Optional[datetime] = None
+    expiry_date: Optional[datetime] = None
+    batch_number: Optional[str] = None
+    location: Optional[str] = None
+
+class Inventory(InventoryBase):
+    inv_id: int
+    product_id: int
+    last_updated: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class InventoryUpdate(BaseModel):
+    quantity_available: Optional[int] = Field(None, ge=0, description="Cannot be negative")
+    reorder_level: Optional[int] = Field(None, ge=0)
+    reorder_quantity: Optional[int] = Field(None, gt=0)
+
+    @field_validator('reorder_quantity')
+    @classmethod
+    def validate_reorder_quantity(cls, v, info):
+        if v is not None and info.data.get('reorder_level') is not None:
+            if v <= info.data['reorder_level']:
+                raise ValueError('Reorder quantity should be greater than reorder level')
+        return v
+
+# =========================================================
+# 💰 PRICE HISTORY SCHEMAS
+# =========================================================
+
+class ProductPriceHistoryBase(BaseModel):
+    old_price: float
+    new_price: float
+    reason: Optional[str] = None
+
+class ProductPriceHistory(ProductPriceHistoryBase):
+    ph_id: int
+    product_id: int
+    changed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# =========================================================
+# 📦 PRODUCT SCHEMAS
+# =========================================================
+
+class ProductBase(BaseModel):
+    name: str
+    price: float
+    category_id: int
+    brand: Optional[str] = None
+    attributes: Optional[Dict[str, Any]] = Field(
+        default=None,
+        example={"color": "red", "warranty": "2 years"}
+    )
+
+
+class ProductCreate(ProductBase):
+    inventory: Optional[InventoryBase] = None
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    price: Optional[float] = Field(None, gt=0, description="Price must be positive")
+    category_id: Optional[int] = Field(None, gt=0, description="Category ID must be positive")
+    brand: Optional[str] = Field(None, max_length=100)
+    attributes: Optional[Dict[str, Any]] = Field(
+        default=None,
+        example={"color": "red", "warranty": "2 years"}
+    )
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError('Name cannot be empty or just whitespace')
+        return v.strip() if v else v
+
+    @field_validator('brand')
+    @classmethod
+    def validate_brand(cls, v):
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError('Brand cannot be empty or just whitespace')
+        return v.strip() if v else v
+
+class ProductSummary(BaseModel):
+    product_id: int
+    name: str
+    price: float
+    brand: Optional[str] = None
+    category_name: str
+    rating: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class Product(ProductBase):
+    product_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    category: Category
+    price_history: List[ProductPriceHistory] = []
+
+    class Config:
+        from_attributes = True
+
+# =========================================================
+# 📋 PAGINATED RESPONSE SCHEMAS
+# =========================================================
+
+class ProductListResponse(BaseModel):
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+    products: List[ProductSummary]
+
+# =========================================================
+# 🔁 STOCK MOVEMENT SCHEMAS
+# =========================================================
+
+class StockMovementBase(BaseModel):
+    product_id: int
+    cart_id: Optional[int] = None
+    order_id: Optional[int] = None
+    change: int
+    reason: Optional[str] = None
+
+class StockMovement(StockMovementBase):
+    stock_id: int
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+ProductCreate.model_rebuild()
+
+
+### FILE: Products\__init__.py ###
+
+
+
+### FILE: Users\crud.py ###
+
+from sqlalchemy.orm import Session
+from .models import User
+from .schemas import UserCreate
+from auth import get_password_hash
+ 
+ 
+def create_user(db: Session, user: UserCreate):
+    hashed_pw = get_password_hash(user.password)
+    db_user = User(
+        username=user.username,
+        email=user.email,
+        password=hashed_pw,
+        gender=user.gender,
+        age=user.age,
+        phone_number=user.phone_number,
+        nationality=user.nationality,
+        is_active=user.is_active
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+ 
+ 
+def get_user_by_email(db: Session, email: str):
+    return db.query(User).filter(User.email == email).first()
+ 
+ 
+def get_user_by_id(db: Session, user_id: int):
+    return db.query(User).filter(User.user_id == user_id).first()
+ 
+ 
+def get_users(db: Session):
+    return db.query(User).all()
+ 
+ 
+def delete_user(db: Session, user_id: int):
+    user = get_user_by_id(db, user_id)
+    if user:
+        db.delete(user)
+        db.commit()
+        return True
+    return False
+ 
+
+### FILE: Users\models.py ###
+
+from sqlalchemy import Column, Integer, String, Boolean
+from database import Base
+ 
+class User(Base):
+    __tablename__ = "users"
+    user_id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True)
+    email = Column(String(100), unique=True, index=True)
+    password = Column(String(255), nullable=False)
+    gender = Column(String(20))
+    age = Column(Integer)
+    phone_number = Column(String(20))
+    nationality = Column(String(50))
+    is_active = Column(Boolean, default=True)
+
+### FILE: Users\routes.py ###
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordRequestForm
+from typing import Any, Dict, List, Optional
+from Products.schemas import ProductListResponse, ProductSummary
+from database import get_db
+from fastapi import Body
+from . import schemas, crud
+from auth import create_access_token, verify_password
+from utils import get_current_user
+from Orders.crud import get_user_cart, create_order, clear_cart
+from Orders.schemas import OrderCreate, OrderResponse, CartItemResponse,OrderItem
+from Products.crud import get_all_products
+from Products import crud as product_crud
+from Orders.schemas import OrderResponse, CartItemResponse, CartItemCreate, CartCreate, OrderCreate
+from Orders import crud as order_crud
+ 
+router = APIRouter(tags=['Users'])
+ 
+ 
+@router.post("/register", response_model=schemas.UserOut)
+def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    if crud.get_user_by_email(db, user.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+    new_user = crud.create_user(db, user)
+    return new_user
+ 
+ 
+@router.post("/token")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = crud.get_user_by_email(db, form_data.username)
+    if not user or not verify_password(form_data.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token({"sub": user.email})
+    return {"access_token": token, "token_type": "bearer"}
+ 
+ 
+@router.get("/", response_model=List[schemas.UserOut])
+def list_users(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    return crud.get_users(db)
+ 
+ 
+@router.get("/{user_id}", response_model=schemas.UserOut)
+def get_user(user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+ 
+ 
+@router.delete("/{user_id}")
+def remove_user(user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    success = crud.delete_user(db, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"detail": f"User {user_id} deleted"}
+ 
+@router.get("/{user_id}/products_recommendations")
+def get_recommendations(user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    return product_crud.generate_recommendations(limit=5, db=db)
+ 
+ 
+@router.get("/{user_id}/browse_products", response_model=ProductListResponse)
+def browse_products(
+    user_id: int,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    sort_by: str = Query("created_at"),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
+    min_price: Optional[float] = Query(None, ge=0),
+    max_price: Optional[float] = Query(None, ge=0),
+    category_id: Optional[int] = Query(None),
+    in_stock_only: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+ 
+    skip = (page - 1) * per_page
+    filters = {
+        "min_price": min_price,
+        "max_price": max_price,
+        "category_id": category_id,
+        "in_stock_only": in_stock_only
+    }
+ 
+    total, products = product_crud.get_paginated_products(
+        db=db,
+        skip=skip,
+        limit=per_page,
+        search=search,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        filters=filters
+    )
+ 
+    product_summaries = []
+    for product in products:
+        rating = product.attributes.get("rating") if product.attributes else None
+        product_summaries.append(ProductSummary(
+            product_id=product.product_id,
+            name=product.name,
+            price=product.price,
+            brand=product.brand,
+            category_name=product.category.name if product.category else "Unknown",
+            rating=rating
+        ))
+ 
+    total_pages = (total + per_page - 1) // per_page
+ 
+    return ProductListResponse(
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        products=product_summaries
+    )
+ 
+ 
+@router.post("/{user_id}/addToCart", response_model=CartItemResponse)
+def add_to_cart(
+    user_id: int,
+    item: CartItemCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    cart = db.query(order_crud.Cart).filter_by(user_id=user_id).first()
+    if not cart:
+        cart = order_crud.create_cart(db, CartCreate(user_id=user_id))
+ 
+    return order_crud.add_item(db=db, cart_id=cart.cart_id, item_in=item)
+ 
+@router.post("/{user_id}/cancel_order/{order_id}")
+def cancel_order(
+    user_id: int,
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(403, "Unauthorized")
+ 
+    return order_crud.cancel_order(db, order_id)
+ 
+ 
+@router.delete("/{user_id}/remove_item", response_model=List[CartItemResponse])
+def remove_item(
+    user_id: int,
+    product_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(403, "Unauthorized")
+ 
+    cart = db.query(order_crud.Cart).filter_by(user_id=user_id).first()
+    if not cart:
+        raise HTTPException(404, "Cart not found")
+ 
+    item = db.query(order_crud.CartItem).filter_by(cart_id=cart.cart_id, product_id=product_id).first()
+    if not item:
+        raise HTTPException(404, "Item not found in cart")
+ 
+    order_crud.remove_item(db, item_id=item.item_id)
+    return order_crud.list_cart_items(db, cart.cart_id)
+ 
+ 
+@router.get("/{user_id}/mycart", response_model=List[CartItemResponse])
+def my_cart(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    cart = db.query(order_crud.Cart).filter_by(user_id=user_id).first()
+    if not cart:
+        return []
+
+    # Transform to CartItemResponse
+    enriched_items = []
+    for item in cart.items:
+        enriched_items.append(CartItemResponse(
+            item_id=item.item_id,
+            product_id=item.product_id,
+            quantity=item.quantity,
+            unit_price=item.price,
+            total_price=round(item.quantity * item.price, 2)
+        ))
+
+    return enriched_items
+
+ 
+ 
+@router.get("/{user_id}/myorders", response_model=List[OrderResponse])
+def my_orders(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    return order_crud.get_user_orders(db, user_id=user_id)
+
+ 
+@router.delete("/{user_id}/remove_item", response_model=List[CartItemResponse])
+def remove_item(
+    user_id: int,
+    product_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+ 
+    cart = db.query(order_crud.Cart).filter_by(user_id=user_id).first()
+    if not cart:
+        raise HTTPException(status_code=404, detail="Cart not found")
+ 
+    item = db.query(order_crud.CartItem).filter_by(cart_id=cart.cart_id, product_id=product_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found in cart")
+ 
+    order_crud.remove_item(db, item_id=item.item_id)
+    return order_crud.list_cart_items(db, cart.cart_id)
+ 
+ 
+@router.delete("/{user_id}/clear_cart")
+def clear_cart(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+ 
+    cart = db.query(order_crud.Cart).filter_by(user_id=user_id).first()
+    if not cart:
+        raise HTTPException(status_code=404, detail="Cart not found")
+ 
+    order_crud.clear_cart(db, cart.cart_id)
+    return {"message": "Cart cleared"}
+ 
+ 
+@router.post("/{user_id}/checkout", response_model=OrderResponse)
+def checkout(
+    user_id: int,
+    shipping_address: str = Body(..., embed=True),
+    payment_method: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    if current_user.user_id != user_id:
+        raise HTTPException(403, "Unauthorized")
+ 
+    cart = db.query(order_crud.Cart).filter_by(user_id=user_id).first()
+    if not cart or not cart.items:
+        raise HTTPException(400, "Cart is empty")
+ 
+    order_items = [
+        OrderItem(
+            product_id=item.product_id,
+            quantity=item.quantity,
+            price=item.price
+        )
+        for item in cart.items
+    ]
+ 
+    order_in = OrderCreate(
+        user_id=user_id,
+        cart_id=cart.cart_id,
+        items=order_items,
+        shipping_address=shipping_address,
+        payment_method=payment_method
+    )
+ 
+    created_order = order_crud.create_order(db, order_in)
+    order_crud.clear_cart(db, cart.cart_id)
+ 
+    return created_order
+
+### FILE: Users\schemas.py ###
+
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
+from datetime import datetime
+ 
+class UserBase(BaseModel):
+    username: str
+    email: EmailStr
+    gender: str
+    age: int
+    phone_number: str
+    nationality: str
+    is_active: Optional[bool] = True
+ 
+class UserCreate(UserBase):
+    password: str
+ 
+class UserOut(UserBase):
+    user_id: int  # ✅ match SQLAlchemy model field name
+ 
+    class Config:
+        from_attributes = True  # Enables ORM conversion
+ 
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+### FILE: Users\__init__.py ###
+

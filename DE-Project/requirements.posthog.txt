@@ -1,2 +1,4 @@
 kafka-python==1.4.7
 posthog==3.0.1
+requests
+python-dotenv

@@ -4,12 +4,20 @@ import logging
 import os
 from kafka import KafkaConsumer
 import posthog
+from dotenv import load_dotenv
+
+# === Load .env for local runs ===
+load_dotenv()
 
 # === ENV CONFIG ===
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "ecommerce_events")
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY")
 POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.posthog.com")
+
+# === Credential validation ===
+if not POSTHOG_API_KEY:
+    raise EnvironmentError("❌ POSTHOG_API_KEY not set in environment")
 
 # === SETUP LOGGING ===
 logging.basicConfig(level=logging.INFO)
@@ -51,4 +59,4 @@ if __name__ == "__main__":
             consume_events()
         except Exception as err:
             logger.error(f"💥 Error in consumer: {err}")
-            time.sleep(5)  # Wait before retrying
+            time.sleep(5)

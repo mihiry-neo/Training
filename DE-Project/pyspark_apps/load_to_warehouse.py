@@ -1,10 +1,13 @@
 from pyspark.sql import SparkSession
-import sys
 import os
+import sys
 import traceback
+from dotenv import load_dotenv
+
+# Load from .env for local testing (no effect inside Docker)
+load_dotenv()
 
 def load_gold_table_to_postgres(spark, gold_table_path, pg_jdbc_url, connection_properties, target_table_name):
-    """Loads a Gold Parquet table to a PostgreSQL table."""
     print(f"\n[INFO] Reading Gold data from: {gold_table_path}")
     try:
         df_gold = spark.read.parquet(gold_table_path)
@@ -27,18 +30,29 @@ def load_gold_table_to_postgres(spark, gold_table_path, pg_jdbc_url, connection_
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: load_to_warehouse.py <gold_base_path> <pg_jdbc_url> <user> <password> <processing_date YYYY-MM-DD>")
+    if len(sys.argv) != 3:
+        print("Usage: load_to_warehouse.py <gold_base_path> <processing_date YYYY-MM-DD>")
         sys.exit(1)
 
-    gold_base_path = sys.argv[1]      # e.g. /opt/data_lake/gold
-    pg_jdbc_url = sys.argv[2]
-    pg_user = sys.argv[3]
-    pg_password = sys.argv[4]
-    processing_date = sys.argv[5]
+    gold_base_path = sys.argv[1]
+    processing_date = sys.argv[2]
 
     print(f"\n[INFO] Starting warehouse load for date: {processing_date}")
     spark = SparkSession.builder.appName("LoadGoldToWarehouse").getOrCreate()
+
+    # Load credentials and DB config from env
+    pg_user = os.getenv("POSTGRES_USER")
+    pg_password = os.getenv("POSTGRES_PASSWORD")
+    pg_host = os.getenv("POSTGRES_HOST", "postgres_dw")
+    pg_port = os.getenv("POSTGRES_PORT", "5432")
+    pg_db = os.getenv("POSTGRES_DB", "airflow")
+
+    if not pg_user or not pg_password:
+        print("❌ Missing PostgreSQL credentials in environment.")
+        sys.exit(1)
+
+    # Construct JDBC URL
+    pg_jdbc_url = f"jdbc:postgresql://{pg_host}:{pg_port}/{pg_db}"
 
     connection_props = {
         "user": pg_user,
@@ -46,7 +60,6 @@ if __name__ == "__main__":
         "driver": "org.postgresql.Driver"
     }
 
-    # Gold tables and their target PostgreSQL warehouse destinations
     gold_targets = {
         "product_daily_performance": "facts.fact_orders",
         "sales_daily_summary": "facts.sales_summary",
