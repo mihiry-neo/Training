@@ -1,0 +1,12 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.posthog.txt .
+
+RUN pip install --no-cache-dir -r requirements.posthog.txt
+
+COPY posthog_event_producer.py /app/
+COPY posthog_event_consumer.py /app/
+
+CMD ["sleep", "infinity"]  # override via docker-compose
