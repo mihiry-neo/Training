@@ -9,7 +9,6 @@ CREATE SCHEMA IF NOT EXISTS dimensions;
 -- DIMENSIONS
 -- ========================
 
--- Dimension: Customers
 CREATE TABLE dimensions.dim_users (
     user_id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE,
@@ -24,7 +23,6 @@ CREATE TABLE dimensions.dim_users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Dimension: Categories (Optional but useful for rollups)
 CREATE TABLE IF NOT EXISTS dimensions.dim_categories (
     category_sk SERIAL PRIMARY KEY,
     category_id INT UNIQUE,
@@ -34,7 +32,6 @@ CREATE TABLE IF NOT EXISTS dimensions.dim_categories (
     updated_at TIMESTAMP
 );
 
--- Dimension: Products
 CREATE TABLE IF NOT EXISTS dimensions.dim_products (
     product_sk SERIAL PRIMARY KEY,
     product_id INT UNIQUE,
@@ -48,7 +45,6 @@ CREATE TABLE IF NOT EXISTS dimensions.dim_products (
     updated_at TIMESTAMP
 );
 
--- Dimension: Customer Segments (Gold Output)
 CREATE TABLE IF NOT EXISTS dimensions.customer_segments (
     segment_sk SERIAL PRIMARY KEY,
     customer_id INT,
@@ -63,7 +59,6 @@ CREATE TABLE IF NOT EXISTS dimensions.customer_segments (
 -- FACTS
 -- ========================
 
--- Fact: Orders (flattened from JSON items in Bronze/Gold)
 CREATE TABLE IF NOT EXISTS facts.fact_orders (
     order_sk SERIAL PRIMARY KEY,
     order_id INT,
@@ -81,7 +76,6 @@ CREATE TABLE IF NOT EXISTS facts.fact_orders (
     FOREIGN KEY (product_id) REFERENCES dimensions.dim_products(product_id)
 );
 
--- Fact: Daily Sales Summary
 CREATE TABLE IF NOT EXISTS facts.sales_summary (
     summary_sk SERIAL PRIMARY KEY,
     order_date DATE,

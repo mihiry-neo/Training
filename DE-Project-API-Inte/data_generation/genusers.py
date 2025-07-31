@@ -1,5 +1,3 @@
-# ✅ genusers.py
-
 import os
 import random
 import pymysql
@@ -10,12 +8,11 @@ from datetime import datetime
 load_dotenv()
 fake = Faker()
 
-# MySQL env
-MYSQL_HOST = os.getenv("MYSQL_HOST", "mysql_source")
-MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-MYSQL_USER = os.getenv("MYSQL_USER", "ecomuser")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "ecompassword")
-MYSQL_DB = os.getenv("MYSQL_DATABASE", "ecommerce_db")
+MYSQL_HOST = os.getenv("MYSQL_HOST")
+MYSQL_PORT = int(os.getenv("MYSQL_PORT"))
+MYSQL_USER = os.getenv("MYSQL_USER")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+MYSQL_DB = os.getenv("MYSQL_DATABASE")
 
 def get_connection():
     return pymysql.connect(
@@ -65,7 +62,7 @@ def main(total=500):
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"✅ Inserted {inserted} users into MySQL (ecommerce_db)")
+    print(f"Inserted {inserted} users into MySQL (ecommerce_db)")
 
 if __name__ == "__main__":
     main()

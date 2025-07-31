@@ -7,13 +7,12 @@ import os
 import shutil
 import logging
 
-# === Paths & Configuration ===
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_LAKE_PATH = os.path.join(PROJECT_ROOT, '..', 'data_lake')
 BRONZE_BASE_PATH = os.path.join(DATA_LAKE_PATH, 'bronze')
 ARCHIVE_BASE_PATH = os.path.join(DATA_LAKE_PATH, 'archive', 'bronze')
-RETENTION_DAYS_BRONZE = 1  # Archive data older than 1 year
-BRONZE_TABLES = ['orders', 'customers', 'products']  # Add more tables here if needed
+RETENTION_DAYS_BRONZE = 1
+BRONZE_TABLES = ['orders', 'customers', 'products']
 
 def archive_old_bronze_data(base_bronze_path, archive_bronze_path, retention_days, table_name):
     """Archives bronze data older than retention_days."""
@@ -59,7 +58,6 @@ def archive_old_bronze_data(base_bronze_path, archive_bronze_path, retention_day
     else:
         log.info(f"[SUMMARY] Archived {archived_count} partition(s) for '{table_name}'.")
 
-# === Airflow DAG definition ===
 default_args_archive = {
     'owner': 'airflow',
     'depends_on_past': False,

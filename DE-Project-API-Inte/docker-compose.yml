@@ -1,9 +1,6 @@
 version: "3.9"
 
 services:
-
-  # ------------------ DATABASES ------------------
-
   mysql_source:
     image: mysql:8.0
     container_name: mysql_source
@@ -46,8 +43,6 @@ services:
     networks:
       - ecommerce_network
 
-  # ------------------ SPARK ------------------
-
   spark-master:
     image: bitnami/spark:3.5
     container_name: spark-master
@@ -81,8 +76,6 @@ services:
       - ./jars:/opt/spark/jars
     networks:
       - ecommerce_network
-
-  # ------------------ AIRFLOW ------------------
 
   airflow-init:
     build:
@@ -181,8 +174,6 @@ services:
     networks:
       - ecommerce_network
 
-  # ------------------ KAFKA ------------------
-
   zookeeper:
     image: bitnami/zookeeper:3.8
     container_name: zookeeper
@@ -209,8 +200,6 @@ services:
     networks:
       - ecommerce_network
 
-  # ------------------ POSTHOG PRODUCER/CONSUMER ------------------
-
   posthog-event-producer:
     build:
       context: .
@@ -228,7 +217,7 @@ services:
       - KAFKA_TOPIC=${KAFKA_TOPIC}
     volumes:
       - ./posthog_event_producer.py:/app/posthog_event_producer.py
-    command: ["sleep", "infinity"]   # 🧊 Don't run automatically
+    command: ["sleep", "infinity"]
     networks:
       - ecommerce_network
 
@@ -253,8 +242,6 @@ services:
     networks:
       - ecommerce_network
 
-  # ------------------ KAFKA UI (OPTIONAL) ------------------
-
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -269,8 +256,6 @@ services:
       - kafka
     networks:
       - ecommerce_network
-
-  # ------------------ SUPERSET ------------------
 
   superset:
     build:
@@ -299,8 +284,6 @@ services:
       "
     networks:
       - ecommerce_network
-
-# ------------------ VOLUMES & NETWORKS ------------------
 
 volumes:
   mysql_data:

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 
-# Load environment variables for local dev only
 load_dotenv()
 
 default_args = {
@@ -26,7 +25,6 @@ with DAG(
     tags=['ecommerce', 'medallion', 'spark']
 ) as dag:
 
-    # BRONZE INGESTION
     bronze_users = BashOperator(
         task_id='bronze_ingest_users',
         bash_command="""
@@ -72,7 +70,6 @@ with DAG(
         """
     )
 
-    # SILVER PROCESSING
     silver_processing = BashOperator(
         task_id='silver_processing',
         bash_command="""
@@ -81,7 +78,6 @@ with DAG(
         """
     )
 
-    # GOLD AGGREGATION
     gold_aggregation = BashOperator(
         task_id='gold_aggregation',
         bash_command="""
@@ -90,7 +86,6 @@ with DAG(
         """
     )
 
-    # LOAD GOLD TO POSTGRES WAREHOUSE
     load_gold_to_warehouse = BashOperator(
         task_id='load_gold_to_warehouse',
         bash_command="""
@@ -100,7 +95,6 @@ with DAG(
         """
     )
 
-    # LOAD SILVER TO POSTGRES WAREHOUSE
     load_silver_to_warehouse = BashOperator(
         task_id='load_silver_to_warehouse',
         bash_command="""
@@ -110,7 +104,6 @@ with DAG(
         """
     )
 
-    # TASK DEPENDENCIES
     [bronze_orders, bronze_products, bronze_users, bronze_categories, bronze_inventory] >> \
     silver_processing >> gold_aggregation
 

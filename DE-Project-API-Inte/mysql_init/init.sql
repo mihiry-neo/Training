@@ -1,10 +1,7 @@
--- Fully updated init.sql for ecommerce_db
-
 DROP DATABASE IF EXISTS ecommerce_db;
 CREATE DATABASE ecommerce_db;
 USE ecommerce_db;
 
--- USERS
 CREATE TABLE users (
     user_id INT PRIMARY KEY AUTO_INCREMENT,
     username VARCHAR(50) UNIQUE,
@@ -19,7 +16,6 @@ CREATE TABLE users (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- CATEGORIES
 CREATE TABLE categories (
     category_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(100) NOT NULL,
@@ -30,7 +26,6 @@ CREATE TABLE categories (
         ON DELETE SET NULL
 );
 
--- PRODUCTS
 CREATE TABLE products (
     product_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(100) NOT NULL,
@@ -44,7 +39,6 @@ CREATE TABLE products (
         ON DELETE CASCADE
 );
 
--- PRODUCT PRICE HISTORY
 CREATE TABLE product_history (
     ph_id INT PRIMARY KEY AUTO_INCREMENT,
     product_id INT NOT NULL,
@@ -56,7 +50,6 @@ CREATE TABLE product_history (
         ON DELETE CASCADE
 );
 
--- INVENTORY
 CREATE TABLE inventory (
     inv_id INT PRIMARY KEY AUTO_INCREMENT,
     product_id INT NOT NULL UNIQUE,
@@ -74,7 +67,6 @@ CREATE TABLE inventory (
         ON DELETE CASCADE
 );
 
--- CARTS
 CREATE TABLE carts (
     cart_id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
@@ -83,7 +75,6 @@ CREATE TABLE carts (
         ON DELETE CASCADE
 );
 
--- CART ITEMS
 CREATE TABLE cart_items (
     item_id INT PRIMARY KEY AUTO_INCREMENT,
     cart_id INT NOT NULL,
@@ -98,7 +89,6 @@ CREATE TABLE cart_items (
         ON DELETE CASCADE
 );
 
--- ORDERS
 CREATE TABLE orders (
     order_id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
@@ -114,7 +104,6 @@ CREATE TABLE orders (
         ON DELETE CASCADE
 );
 
--- STOCK MOVEMENTS (patched: renamed `change` to `quantity_change`)
 CREATE TABLE stock_movements (
     stock_id INT PRIMARY KEY AUTO_INCREMENT,
     product_id INT,

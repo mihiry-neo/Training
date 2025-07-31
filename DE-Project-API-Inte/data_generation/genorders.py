@@ -9,12 +9,11 @@ from datetime import datetime
 load_dotenv()
 fake = Faker()
 
-# MySQL Configs
-MYSQL_HOST = os.getenv("MYSQL_HOST", "mysql_source")
-MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-MYSQL_USER = os.getenv("MYSQL_USER", "ecomuser")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "ecompassword")
-MYSQL_DB = os.getenv("MYSQL_DATABASE", "ecommerce_db")
+MYSQL_HOST = os.getenv("MYSQL_HOST")
+MYSQL_PORT = int(os.getenv("MYSQL_PORT"))
+MYSQL_USER = os.getenv("MYSQL_USER")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+MYSQL_DB = os.getenv("MYSQL_DATABASE")
 
 NUM_CARTS_TO_CREATE = 200
 NUM_ORDERS_TO_GENERATE = 200
@@ -135,10 +134,10 @@ def main():
     try:
         users = get_random_users(cursor)
         if not users:
-            print("❌ No active users found.")
+            print("No active users found.")
             return
 
-        print(f"🛒 Creating {NUM_CARTS_TO_CREATE} carts...")
+        print(f"Creating {NUM_CARTS_TO_CREATE} carts...")
         used_product_ids = set()
 
         for _ in range(NUM_CARTS_TO_CREATE):
@@ -149,12 +148,12 @@ def main():
                     continue
                 cart_id = create_cart(cursor, user_id)
                 items = create_cart_items(cursor, cart_id, products, used_product_ids)
-                print(f"✅ Cart {cart_id} created for user {user_id} with {len(items)} items.")
+                print(f"Cart {cart_id} created for user {user_id} with {len(items)} items.")
             except Exception as e:
-                print("⚠️  Cart creation failed:", e)
+                print("Cart creation failed:", e)
                 conn.rollback()
 
-        print(f"\n📦 Generating {NUM_ORDERS_TO_GENERATE} orders...")
+        print(f"\nGenerating {NUM_ORDERS_TO_GENERATE} orders...")
         for _ in range(NUM_ORDERS_TO_GENERATE):
             try:
                 user_id = random.choice(users)
@@ -179,15 +178,15 @@ def main():
                 order_id = create_order(cursor, user_id, items)
                 for item in items:
                     log_stock_movement(cursor, item["product_id"], -item["quantity"], "order placed", order_id=order_id)
-                print(f"✅ Order {order_id} created for user {user_id} with {len(items)} items.")
+                print(f"Order {order_id} created for user {user_id} with {len(items)} items.")
             except Exception as e:
-                print("⚠️  Order creation failed:", e)
+                print("Order creation failed:", e)
                 conn.rollback()
 
-        print("🎉 Order generation complete.")
+        print("Order generation complete.")
 
     except Exception as e:
-        print("❌ Error:", e)
+        print("Error:", e)
         conn.rollback()
     finally:
         cursor.close()

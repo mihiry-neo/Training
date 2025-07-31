@@ -1,5 +1,3 @@
-# data_generation_dag.py
-
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
@@ -22,7 +20,7 @@ default_args = {
 with DAG(
     dag_id='generate_ecommerce_sample_data',
     default_args=default_args,
-    schedule_interval='@daily',   # or change to None for manual-only
+    schedule_interval='@daily',
     catchup=False,
     tags=['ecommerce', 'data_generation'],
 ) as dag:

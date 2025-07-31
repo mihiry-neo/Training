@@ -6,18 +6,15 @@ from faker import Faker
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
-# Load environment variables
 load_dotenv()
 fake = Faker()
 
-# MySQL configuration
-MYSQL_HOST = os.getenv("MYSQL_HOST", "mysql_source")
-MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-MYSQL_USER = os.getenv("MYSQL_USER", "ecomuser")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "ecompassword")
-MYSQL_DB = os.getenv("MYSQL_DATABASE", "ecommerce_db")
+MYSQL_HOST = os.getenv("MYSQL_HOST")
+MYSQL_PORT = int(os.getenv("MYSQL_PORT"))
+MYSQL_USER = os.getenv("MYSQL_USER")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+MYSQL_DB = os.getenv("MYSQL_DATABASE")
 
-# Establish DB connection
 def get_connection():
     return pymysql.connect(
         host=MYSQL_HOST,
@@ -28,7 +25,6 @@ def get_connection():
         autocommit=True
     )
 
-# Sample brands and categories
 BRANDS = ["Astra", "Zenex", "Nova", "UrbanMode", "GearPro", "CraftHaus", "NextEra", "Skyline", "PureEssence", "Flytek"]
 
 CATEGORY_STRUCTURE = {
@@ -120,14 +116,14 @@ def main(total=1000):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        print("🗂️ Inserting categories...")
+        print("Inserting categories...")
         category_map = insert_categories(cursor)
-        print(f"📦 Generating {total} products...")
+        print(f"Generating {total} products...")
         products = generate_product_data(category_map, count=total)
         insert_products_and_inventory(cursor, products)
-        print(f"✅ Inserted {len(products)} products with inventory.")
+        print(f"Inserted {len(products)} products with inventory.")
     except Exception as e:
-        print("❌ Error during product generation:", e)
+        print("Error during product generation:", e)
         conn.rollback()
     finally:
         cursor.close()
